@@ -30,7 +30,7 @@ allow Math.sum(2, 3), fn x, y ->
   x * y
 end
 
-iex> Math.sum(1, 3)
+iex> Math.sum(2, 3)
 6
 
 allow Math.sum(_, 3), fn x, y ->
