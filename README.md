@@ -26,5 +26,17 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
 Usage:
 
 ```elixir
-allow(Notification.should_pause?(1) -> false)
+allow Math.sum(2, 3), fn x, y ->
+  x * y
+end
+
+iex> Math.sum(1, 3)
+6
+
+allow Math.sum(_, 3), fn x, y ->
+  5
+end
+
+iex> Math.sum(999, 3)
+5
 ```
