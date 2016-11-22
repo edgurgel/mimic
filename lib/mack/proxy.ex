@@ -14,14 +14,18 @@ defmodule Mack.Proxy do
     {:ok, %State{module: module, stubs: stubs}}
   end
 
-  def handle_call({:apply, func, args}, _from, state = %State{ history: history }) do
+  def handle_call({:apply, func, args}, {pid, _ref} = _from, state = %State{ module: module, history: history }) do
+    arity = Enum.count(args)
     reply = case :ets.lookup(state.stubs, {func, args}) do
       [] ->
-        opts = [module: state.module, function: func, arity: Enum.count(args), reason: 'function not available']
+        arity = Enum.count(args)
+        opts = [module: module, function: func, arity: arity,
+                reason: "function not available: #{inspect(module)}.#{func}(#{inspect(args)}) "]
         UndefinedFunctionError.exception(opts)
+      [{_, result_fn}] when is_function(result_fn, arity) -> apply(result_fn, args)
       [{_, result}] -> result
     end
-    {:reply, reply, %{state | history: [{func, args} | history]}}
+    {:reply, reply, %{state | history: [{pid, func, args, reply} | history]}}
   end
   def handle_call({:allow, func, args, result}, _from, state) do
     :ets.insert(state.stubs, {{func, args}, result})
@@ -54,7 +58,7 @@ defmodule Mack.Proxy do
 
   @doc false
   defmacro __using__(_) do
-    quote location: :keep do
+    quote do
       @doc false
       def unquote(:"$handle_undefined_function")(func, args) do
         Mack.Proxy.apply(__MODULE__, func, args)
