@@ -36,6 +36,7 @@ defmodule Mack.Proxy do
     {:reply, :ok, %{state | history: [] }}
   end
   def handle_call(:history, _from, state), do: {:reply, state.history, state}
+  def handle_call(:stop, _from, state), do: {:stop, :normal, :ok, state}
 
   def apply(module, func, args) do
     case GenServer.call(name(module), {:apply, func, args}) do
@@ -52,6 +53,10 @@ defmodule Mack.Proxy do
 
   def history(module) do
     GenServer.call(name(module), :history)
+  end
+
+  def stop(module) do
+    GenServer.call(name(module), :stop)
   end
 
   def name(module), do: Module.concat(Mack.Proxy, module)
