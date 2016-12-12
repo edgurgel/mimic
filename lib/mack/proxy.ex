@@ -1,5 +1,6 @@
 defmodule Mack.Proxy do
   use GenServer
+  import List, only: [to_tuple: 1]
 
   defmodule State do
     defstruct history: [], module: :undefined, stubs: nil
@@ -10,30 +11,38 @@ defmodule Mack.Proxy do
   end
 
   def init(module) do
-    stubs = :ets.new(module, [:private, :set])
-    {:ok, %State{module: module, stubs: stubs}}
+    {:ok, %State{module: module, stubs: []}}
+  end
+
+  defp find_result(func, args, stubs) do
+    Enum.find(stubs, fn
+      {{^func, args_to_apply}, _result} ->
+        case :ets.test_ms(to_tuple(args), [{to_tuple(args_to_apply), [], [true]}]) do
+          {:ok, true} -> true
+          _ -> false
+        end
+      _ -> false
+    end)
   end
 
   def handle_call({:apply, func, args}, {pid, _ref} = _from, state = %State{ module: module, history: history }) do
     arity = Enum.count(args)
-    reply = case :ets.lookup(state.stubs, {func, args}) do
-      [] ->
+    reply = case find_result(func, args, state.stubs) do
+      nil ->
         arity = Enum.count(args)
         opts = [module: module, function: func, arity: arity,
                 reason: "function not available: #{inspect(module)}.#{func}(#{inspect(args)}) "]
         UndefinedFunctionError.exception(opts)
-      [{_, result_fn}] when is_function(result_fn, arity) -> apply(result_fn, args)
-      [{_, result}] -> result
+      {{^func, _args}, result_fn} when is_function(result_fn, arity) -> apply(result_fn, args)
+      {{^func, _args}, result} -> result
     end
     {:reply, reply, %{state | history: [{pid, func, args, reply} | history]}}
   end
   def handle_call({:allow, func, args, result}, _from, state) do
-    :ets.insert(state.stubs, {{func, args}, result})
-    {:reply, :ok, state}
+    {:reply, :ok, %{state | stubs: [{{func, args}, result} | state.stubs]}}
   end
   def handle_call(:reset, _from, state) do
-    :ets.delete_all_objects(state.stubs)
-    {:reply, :ok, %{state | history: [] }}
+    {:reply, :ok, %{state | stubs: [], history: [] }}
   end
   def handle_call(:history, _from, state), do: {:reply, state.history, state}
   def handle_call(:stop, _from, state), do: {:stop, :normal, :ok, state}

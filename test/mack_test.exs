@@ -34,6 +34,12 @@ defmodule Mack.Test do
       assert TestModule.sum(2, 2) == 5
     end
 
+    test "stub a function call that does not exist" do
+      allow(TestModule, :times, [2, 2], 9)
+
+      assert TestModule.times(2, 2) == 9
+    end
+
     # test "stub a function call with _ arg with scalar result" do
       # allow(TestModule, :sum, [:_, 2], 5)
 
