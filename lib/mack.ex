@@ -86,22 +86,14 @@ defmodule Mack do
 
   def allow(module, func, args, result), do: Proxy.allow(module, func, args, result)
 
-  # defmacro allow(call, do: clause) do
-    # IO.puts "allow/2"
-    # IO.inspect [call: call]
-    # IO.inspect [clause: clause]
-    # # {{:., [line: 40], [{:__aliases__, [counter: 0, line: 40], [:TestModule]}, :sum]}, [line: 40], [1, 1]}
-    # {{:., _, [module, func]}, _, args} = call
-    # # IO.inspect Macro.expand(module, __CALLER__)
-    # # IO.inspect [module, func, args, result_function]
-    # # funtion = unquote(result_function)
-    # # IO.inspect [module, func, args, result_function]
-    # # IO.inspect args
-    # module = Macro.expand(module, __CALLER__)
-    # quote do
-      # allow(unquote(module), unquote(func), unquote(args), unquote(clause))
-    # end
-  # end
+  defmacro allow(call, do: clause) do
+    {{:., _, [module, func]}, _, args} = call
+    underscore_args = Enum.map(args, fn _x -> :_ end)
+    module = Macro.expand(module, __CALLER__)
+    quote do
+      allow(unquote(module), unquote(func), unquote(underscore_args), fn (unquote_splicing(args)) -> unquote(clause) end)
+    end
+  end
   defmacro allow(call, result_function) do
     {{:., _, [module, func]}, _, args} = call
     module = Macro.expand(module, __CALLER__)

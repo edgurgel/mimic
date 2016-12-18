@@ -1,6 +1,7 @@
 defmodule Mack.Test do
   use ExUnit.Case
   import Mack
+  require Mack
   doctest Mack
 
   setup do
@@ -78,13 +79,13 @@ defmodule Mack.Test do
       assert TestModule.sum(2, 3) == 6
     end
 
-    # test "stub a function call with do" do
-      # allow TestModule.sum(x, y) do
-        # x + y
-      # end
+    test "stub a function call with do" do
+      allow TestModule.sum(x, y) do
+        x * y
+      end
 
-      # assert TestModule.sum(2, 3) == 6
-    # end
+      assert TestModule.sum(2, 3) == 6
+    end
 
     # test "stub a function call with function result throwing an error" do
       # allow(TestModule, :sum, [2, 2], fn x, y -> exit(1) end)
