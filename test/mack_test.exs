@@ -27,6 +27,16 @@ defmodule Mack.Test do
     end
   end
 
+  describe "received?/4" do
+    test "expect call" do
+      allow(TestModule, :sum, [2, 2], 5)
+
+      assert TestModule.sum(2, 2) == 5
+      assert received? TestModule, :sum, [2, 2], 5
+      refute received? TestModule, :sum, [4, 4], 5
+    end
+  end
+
   describe "allow/4" do
     test "stub a function call with scalar result" do
       allow(TestModule, :sum, [2, 2], 5)
@@ -40,11 +50,19 @@ defmodule Mack.Test do
       assert TestModule.times(2, 2) == 9
     end
 
-    # test "stub a function call with _ arg with scalar result" do
-      # allow(TestModule, :sum, [:_, 2], 5)
+    test "stub a function call with _ arg with scalar result" do
+      allow(TestModule, :sum, [:_, 2], 5)
+      allow(TestModule, :sum, [2, :_], 9)
 
-      # assert TestModule.sum(1, 2) == 5
-    # end
+      assert TestModule.sum(1, 2) == 5
+      assert TestModule.sum(2, 3) == 9
+    end
+
+    test "stub a function call with _ arg with function result" do
+      allow(TestModule, :sum, [:_, :_], fn x, y -> {x, y, x + y} end)
+
+      assert TestModule.sum(3, 7) == {3, 7, 10}
+    end
 
     test "stub a function call with function result" do
       allow(TestModule, :sum, [2, 2], fn x, y -> {x, y} end)
@@ -72,14 +90,6 @@ defmodule Mack.Test do
       # allow(TestModule, :sum, [2, 2], fn x, y -> exit(1) end)
 
       # assert TestModule.sum(2, 2) == {2, 2}
-    # end
-
-    # test "stub a function call with _" do
-      # allow TestModule.sum(:_, :_) do
-
-      # end
-
-      # assert TestModule.sum(2, 2) == 5
     # end
   end
 

@@ -78,6 +78,12 @@ defmodule Mack do
   end
   defp rename_attribute([h | t], new_name), do: [h | rename_attribute(t, new_name)]
 
+  def received?(module, func, args, result) do
+    Enum.find(Proxy.history(module), fn {_pid, ^func, ^args, ^result} -> true
+                                        _ -> false
+    end)
+  end
+
   def allow(module, func, args, result), do: Proxy.allow(module, func, args, result)
 
   # defmacro allow(call, do: clause) do
