@@ -86,19 +86,19 @@ defmodule Mack do
 
   def allow(module, func, args, result), do: Proxy.allow(module, func, args, result)
 
+  @doc """
+  allow/2 can receive a do clause:
+
+  allow TestModule.sum(x, y) do
+    x * y
+  end
+  """
   defmacro allow(call, do: clause) do
     {{:., _, [module, func]}, _, args} = call
     underscore_args = Enum.map(args, fn _x -> :_ end)
     module = Macro.expand(module, __CALLER__)
     quote do
       allow(unquote(module), unquote(func), unquote(underscore_args), fn (unquote_splicing(args)) -> unquote(clause) end)
-    end
-  end
-  defmacro allow(call, result_function) do
-    {{:., _, [module, func]}, _, args} = call
-    module = Macro.expand(module, __CALLER__)
-    quote do
-      allow(unquote(module), unquote(func), unquote(args), unquote(result_function))
     end
   end
 end

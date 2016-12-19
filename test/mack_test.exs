@@ -71,14 +71,6 @@ defmodule Mack.Test do
       assert TestModule.sum(2, 2) == {2, 2}
     end
 
-    test "stub a function call with fn" do
-      allow TestModule.sum(2, 3), fn x, y ->
-        x * y
-      end
-
-      assert TestModule.sum(2, 3) == 6
-    end
-
     test "stub a function call with do" do
       allow TestModule.sum(x, y) do
         x * y
