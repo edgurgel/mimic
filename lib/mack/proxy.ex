@@ -3,19 +3,25 @@ defmodule Mack.Proxy do
   import List, only: [to_tuple: 1]
 
   defmodule State do
-    defstruct history: [], module: :undefined, stubs: nil
+    defstruct history: [], module: :undefined, stubs: nil,
+              passthrough: false, backup_module: :undefined
   end
 
-  def start_link(module) do
-    GenServer.start_link(__MODULE__, module, name: name(module))
+  def start_link(module, backup_module, opts) do
+    GenServer.start_link(__MODULE__, [module, backup_module, opts], name: name(module))
   end
 
-  def init(module) do
-    {:ok, %State{module: module, stubs: []}}
+  def init([module, backup_module, opts]) do
+    passthrough = Keyword.get(opts, :passthrough, false)
+    {:ok, %State{module: module, stubs: [], backup_module: backup_module, passthrough: passthrough}}
   end
 
   def handle_call({:apply, func, args}, {pid, _ref} = _from, state = %State{ module: module, history: history }) do
     result = eval_apply(module, func, args, state.stubs)
+    result = cond do
+              %UndefinedFunctionError{} == result && state.passthrough -> Kernel.apply(state.backup_module, func, args)
+              true -> result
+            end
     {:reply, result, %{state | history: [{pid, func, args, result} | history]}}
   end
   def handle_call({:allow, func, args, result}, _from, state) do
@@ -30,13 +36,16 @@ defmodule Mack.Proxy do
   defp eval_apply(module, func, args, stubs) do
     arity = Enum.count(args)
     case find_result(func, args, stubs) do
-      nil ->
-      opts = [module: module, function: func, arity: arity,
-       reason: "function not available: #{inspect(module)}.#{func}(#{inspect(args)}) "]
-                                                  UndefinedFunctionError.exception(opts)
+      nil -> undefined_function_exception(module, func, arity, args)
       {{^func, _args}, result_fn} when is_function(result_fn, arity) -> apply(result_fn, args)
       {{^func, _args}, result} -> result
     end
+  end
+
+  defp undefined_function_exception(module, func, arity, args) do
+    opts = [module: module, function: func, arity: arity,
+            reason: "function not available: #{inspect(module)}.#{func}(#{inspect(args)}) "]
+    UndefinedFunctionError.exception(opts)
   end
 
   defp find_result(func, args, stubs) do

@@ -7,8 +7,8 @@ defmodule Mack.Supervisor do
     Supervisor.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-  def start_proxy(module) do
-    Supervisor.start_child(__MODULE__, [module])
+  def start_proxy(module, backup_module, opts) do
+    Supervisor.start_child(__MODULE__, [module, backup_module, opts])
   end
 
   def init(:ok) do

@@ -10,17 +10,18 @@ defmodule Mack do
     Supervisor.start_link(children, opts)
   end
 
-  def new(module) do
+  def new(module, opts \\ []) do
+    backup_module = backup_module(module)
     contents =
       quote do
         use Mack.Proxy
       end
 
-    rename_module(module, backup_module(module))
+    rename_module(module, backup_module)
     Code.compiler_options(ignore_module_conflict: true)
     Module.create(module, contents, Macro.Env.location(__ENV__))
     Code.compiler_options(ignore_module_conflict: false)
-    Mack.Supervisor.start_proxy(module)
+    Mack.Supervisor.start_proxy(module, backup_module, opts)
     :ok
   end
 
