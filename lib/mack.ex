@@ -80,12 +80,13 @@ defmodule Mack do
   defp rename_attribute([h | t], new_name), do: [h | rename_attribute(t, new_name)]
 
   def received?(module, func, args, result) do
-    Enum.find(Proxy.history(module), fn {_pid, ^func, ^args, ^result} -> true
+    Enum.find(Proxy.history(module), fn {_pid, ^func, ^args, {:value, ^result}} -> true
                                         _ -> false
     end)
   end
 
   def allow(module, func, args, result), do: Proxy.allow(module, func, args, result)
+  def allow(module, func, result) when is_function(result), do: Proxy.allow(module, func, result)
 
   @doc """
   allow/2 can receive a do clause:

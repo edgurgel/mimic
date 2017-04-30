@@ -19,7 +19,7 @@ defmodule Mack.Proxy do
   def handle_call({:apply, func, args}, {pid, _ref} = _from, state = %State{ module: module, history: history }) do
     result = eval_apply(module, func, args, state.stubs)
     result = cond do
-              %UndefinedFunctionError{} == result && state.passthrough -> Kernel.apply(state.backup_module, func, args)
+              {:error, %UndefinedFunctionError{}} && state.passthrough -> Kernel.apply(state.backup_module, func, args)
               true -> result
             end
     {:reply, result, %{state | history: [{pid, func, args, result} | history]}}
@@ -36,9 +36,20 @@ defmodule Mack.Proxy do
   defp eval_apply(module, func, args, stubs) do
     arity = Enum.count(args)
     case find_result(func, args, stubs) do
-      nil -> undefined_function_exception(module, func, arity, args)
-      {{^func, _args}, result_fn} when is_function(result_fn, arity) -> apply(result_fn, args)
-      {{^func, _args}, result} -> result
+      nil -> {:error, undefined_function_exception(module, func, arity, args)}
+      {{^func, _args}, result_fn} when is_function(result_fn, arity) -> apply_fn(result_fn, args)
+      {{^func, _args}, result} -> {:value, result}
+    end
+  end
+
+  defp apply_fn(function, args) do
+    try do
+      value = apply(function, args)
+      {:value, value}
+    catch
+      value -> {:throw, value}
+    rescue
+      error -> {:error, error}
     end
   end
 
@@ -61,12 +72,19 @@ defmodule Mack.Proxy do
 
   def apply(module, func, args) do
     case GenServer.call(name(module), {:apply, func, args}) do
-      %UndefinedFunctionError{} = exception -> raise exception
-      result -> result
+      {:error, exception} -> raise exception
+      {:throw, value} -> throw value
+      {:value, value} -> value
     end
   end
 
   def allow(module, func, args, result) do
+    GenServer.call(name(module), {:allow, func, args, result})
+  end
+
+  def allow(module, func, result) when is_function(result) do
+    arity = :erlang.fun_info(result)[:arity]
+    args = Enum.map(arity..1, fn _ -> :_ end)
     GenServer.call(name(module), {:allow, func, args, result})
   end
 

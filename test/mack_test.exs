@@ -24,7 +24,7 @@ defmodule Mack.Test do
     test "restore original module" do
       unload TestModule
       assert TestModule.sum(100, 200) == 300
-      new(TestModule)
+      new TestModule
     end
   end
 
@@ -79,11 +79,20 @@ defmodule Mack.Test do
       assert TestModule.sum(2, 3) == 6
     end
 
-    # test "stub a function call with function result throwing an error" do
-      # allow(TestModule, :sum, [2, 2], fn x, y -> exit(1) end)
+    test "stub a function call with function result throwing a value" do
+      allow(TestModule, :sum, fn _x, _y -> throw(:sum_throw) end)
+      assert catch_throw(TestModule.sum(1, 2)) == :sum_throw
+    end
 
-      # assert TestModule.sum(2, 2) == {2, 2}
-    # end
+    test "stub a function call with function result raising an erlang error" do
+      allow(TestModule, :sum, fn _x, _y -> :erlang.error(:sum_error) end)
+      assert_raise ErlangError, "erlang error: :sum_error", fn -> TestModule.sum(1, 2) end
+    end
+
+    test "stub a function call with function result raising an exception" do
+      allow(TestModule, :sum, fn _x, _y -> raise ArgumentError end)
+      assert_raise ArgumentError, "argument error", fn -> TestModule.sum(1, 2) end
+    end
   end
 
   describe "history/1" do
@@ -96,7 +105,7 @@ defmodule Mack.Test do
       allow(TestModule, :sum, [1, 2], 3)
       TestModule.sum(4, 2)
       TestModule.sum(1, 2)
-      assert history(TestModule) == [{self, :sum, [1, 2], 3}, {self, :sum, [4, 2], 6}]
+      assert history(TestModule) == [{self, :sum, [1, 2], {:value, 3}}, {self, :sum, [4, 2], {:value, 6}}]
     end
   end
 
