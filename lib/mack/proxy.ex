@@ -13,13 +13,19 @@ defmodule Mack.Proxy do
 
   def init([module, backup_module, opts]) do
     passthrough = Keyword.get(opts, :passthrough, false)
+    Process.flag(:trap_exit, true)
     {:ok, %State{module: module, stubs: [], backup_module: backup_module, passthrough: passthrough}}
+  end
+
+  def handle_info(msg, state) do
+    IO.puts "handle_info with #{inspect msg} not handled"
+    {:noreply, state}
   end
 
   def handle_call({:apply, func, args}, {pid, _ref} = _from, state = %State{ module: module, history: history }) do
     result = eval_apply(module, func, args, state.stubs)
     result = cond do
-              {:error, %UndefinedFunctionError{}} && state.passthrough -> Kernel.apply(state.backup_module, func, args)
+              {:error, %UndefinedFunctionError{}} == result && state.passthrough -> Kernel.apply(state.backup_module, func, args)
               true -> result
             end
     {:reply, result, %{state | history: [{pid, func, args, result} | history]}}
@@ -32,6 +38,11 @@ defmodule Mack.Proxy do
   end
   def handle_call(:history, _from, state), do: {:reply, state.history, state}
   def handle_call(:stop, _from, state), do: {:stop, :normal, :ok, state}
+
+  def terminate(_) do
+    IO.puts "terminating"
+    :ok
+  end
 
   defp eval_apply(module, func, args, stubs) do
     arity = Enum.count(args)
@@ -47,6 +58,7 @@ defmodule Mack.Proxy do
       value = apply(function, args)
       {:value, value}
     catch
+      :exit, reason -> {:exit, reason}
       value -> {:throw, value}
     rescue
       error -> {:error, error}
@@ -72,9 +84,10 @@ defmodule Mack.Proxy do
 
   def apply(module, func, args) do
     case GenServer.call(name(module), {:apply, func, args}) do
+      {:value, value} -> value
       {:error, exception} -> raise exception
       {:throw, value} -> throw value
-      {:value, value} -> value
+      {:exit, reason} -> exit reason
     end
   end
 

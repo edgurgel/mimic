@@ -93,6 +93,11 @@ defmodule Mack.Test do
       allow(TestModule, :sum, fn _x, _y -> raise ArgumentError end)
       assert_raise ArgumentError, "argument error", fn -> TestModule.sum(1, 2) end
     end
+
+    test "stub a function call with function result raising an exit" do
+      allow(TestModule, :sum, fn _x, _y -> exit(1) end)
+      assert catch_exit(TestModule.sum(1, 2)) == 1
+    end
   end
 
   describe "history/1" do
