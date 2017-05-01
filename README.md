@@ -33,8 +33,8 @@ end
 iex> Math.sum(2, 3)
 6
 
-allow Math.sum(_, 3), fn x, y ->
-  5
+allow Math.sum(_, 3) do
+5
 end
 
 iex> Math.sum(999, 3)

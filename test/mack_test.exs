@@ -79,6 +79,13 @@ defmodule Mack.Test do
       assert TestModule.sum(2, 3) == 6
     end
 
+    test "stub a function call with a match and do" do
+      allow TestModule.sum(_, 3) do
+        5
+      end
+    end
+
+
     test "stub a function call with function result throwing a value" do
       allow(TestModule, :sum, fn _x, _y -> throw(:sum_throw) end)
       assert catch_throw(TestModule.sum(1, 2)) == :sum_throw
