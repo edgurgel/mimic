@@ -13,8 +13,12 @@ defmodule Mack.Proxy do
 
   def init([module, backup_module, opts]) do
     passthrough = Keyword.get(opts, :passthrough, false)
-    Process.flag(:trap_exit, true)
     {:ok, %State{module: module, stubs: [], backup_module: backup_module, passthrough: passthrough}}
+  end
+
+  def handle_info({:apply_result, from, {pid, func, args, result}}, state) do
+    GenServer.reply(from, result)
+    {:noreply, %{state | history: [{pid, func, args, result} | state.history]}}
   end
 
   def handle_info(msg, state) do
@@ -22,14 +26,15 @@ defmodule Mack.Proxy do
     {:noreply, state}
   end
 
-  def handle_call({:apply, func, args}, {pid, _ref} = _from, state = %State{ module: module, history: history }) do
-    result = eval_apply(module, func, args, state.stubs)
-    result = cond do
-              {:error, %UndefinedFunctionError{}} == result && state.passthrough -> Kernel.apply(state.backup_module, func, args)
-              true -> result
-            end
-    {:reply, result, %{state | history: [{pid, func, args, result} | history]}}
+  def handle_call({:apply, func, args}, {pid, _ref} = from, state) do
+    parent = self()
+    spawn_link fn ->
+      result = do_apply(func, args, state)
+      send parent, {:apply_result, from, {pid, func, args, result}}
+    end
+    {:noreply, state}
   end
+
   def handle_call({:allow, func, args, result}, _from, state) do
     {:reply, :ok, %{state | stubs: [{{func, args}, result} | state.stubs]}}
   end
@@ -42,6 +47,16 @@ defmodule Mack.Proxy do
   def terminate(_) do
     IO.puts "terminating"
     :ok
+  end
+
+  defp do_apply( func, args, state) do
+    result = eval_apply(state.module, func, args, state.stubs)
+
+    if {:error, %UndefinedFunctionError{}} == result && state.passthrough do
+      Kernel.apply(state.backup_module, func, args)
+    else
+      result
+    end
   end
 
   defp eval_apply(module, func, args, stubs) do
@@ -83,7 +98,7 @@ defmodule Mack.Proxy do
   end
 
   def apply(module, func, args) do
-    case GenServer.call(name(module), {:apply, func, args}) do
+    case GenServer.call(name(module), {:apply, func, args}, :infinity) do
       {:value, value} -> value
       {:error, exception} -> raise exception
       {:throw, value} -> throw value
@@ -101,16 +116,28 @@ defmodule Mack.Proxy do
     GenServer.call(name(module), {:allow, func, args, result})
   end
 
+  @doc """
+  Reset stub and history on `module`
+  """
+  @spec reset(module) :: :ok
   def reset(module), do: GenServer.call(name(module), :reset)
 
-  def history(module) do
-    GenServer.call(name(module), :history)
-  end
+  @doc """
+  Return the history of calls that `module` received
+  """
+  @spec history(module) :: [{pid, atom, list, term}]
+  def history(module), do: GenServer.call(name(module), :history)
 
-  def stop(module) do
-    GenServer.call(name(module), :stop)
-  end
+  @doc """
+  Stop the `module` Proxy
+  """
+  @spec stop(module) :: :ok
+  def stop(module), do: GenServer.call(name(module), :stop)
 
+  @doc """
+  Proxy module name
+  """
+  @spec name(module) :: module
   def name(module), do: Module.concat(Mack.Proxy, module)
 
   @doc false

@@ -3,6 +3,7 @@ defmodule Mack do
 
   use Application
 
+  @doc false
   def start(_type, _args) do
     import Supervisor.Spec, warn: false
     children = [supervisor(Mack.Supervisor, [])]
@@ -36,8 +37,16 @@ defmodule Mack do
     {:module, ^module} = :code.ensure_loaded(module)
   end
 
+  @doc """
+  Reset stub and history on `module`
+  """
+  @spec reset(module) :: :ok
   def reset(module), do: Proxy.reset(module)
 
+  @doc """
+  Return the history of calls that `module` received
+  """
+  @spec history(module) :: [{pid, atom, list, term}]
   def history(module), do: Proxy.history(module)
 
   defp rename_module(module, new_module) do
@@ -79,13 +88,26 @@ defmodule Mack do
   end
   defp rename_attribute([h | t], new_name), do: [h | rename_attribute(t, new_name)]
 
+  @doc """
+  Check if `module.func(args)` was called and returned `result`
+  """
+  @spec received?(module, atom, list, term) :: boolean
   def received?(module, func, args, result) do
     Enum.find(Proxy.history(module), fn {_pid, ^func, ^args, {:value, ^result}} -> true
                                         _ -> false
     end)
   end
 
+  @doc """
+  allow `module` to receive to call `func` with `args` and returning `result
+  """
+  @spec allow(module, atom, list, term | function) :: :ok
   def allow(module, func, args, result), do: Proxy.allow(module, func, args, result)
+
+  @doc """
+  allow `module` to receive to call `func` with `args` and returning `result
+  """
+  @spec allow(module, atom, list, function) :: :ok
   def allow(module, func, result) when is_function(result), do: Proxy.allow(module, func, result)
 
   @doc """

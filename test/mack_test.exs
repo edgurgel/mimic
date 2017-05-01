@@ -4,9 +4,14 @@ defmodule Mack.Test do
   require Mack
   doctest Mack
 
-  setup do
+  setup_all do
     new(TestModule)
     on_exit fn -> unload(TestModule) end
+    :ok
+  end
+
+  setup do
+    reset(TestModule)
     :ok
   end
 
@@ -49,6 +54,14 @@ defmodule Mack.Test do
       allow(TestModule, :times, [2, 2], 9)
 
       assert TestModule.times(2, 2) == 9
+    end
+
+    test "stub a function call with timeout" do
+      allow(TestModule, :sum, [2, 2], fn _, _ -> :timer.sleep(5001); 4 end)
+      allow(TestModule, :sum, [2, 3], 5)
+
+      assert TestModule.sum(2, 2) == 4
+      assert TestModule.sum(2, 3) == 5
     end
 
     test "stub a function call with _ arg with scalar result" do
