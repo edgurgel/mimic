@@ -3,6 +3,14 @@ defmodule Mack do
 
   use Application
 
+  defmodule Error do
+    defexception ~w(module func arity)a
+
+    def message(e) do
+      "#{inspect(e.module)}.#{e.func}/#{e.arity} cannot be stubbed as original module does not export such function"
+    end
+  end
+
   @doc false
   def start(_type, _args) do
     import Supervisor.Spec, warn: false

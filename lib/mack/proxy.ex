@@ -36,7 +36,13 @@ defmodule Mack.Proxy do
   end
 
   def handle_call({:allow, func, args, result}, _from, state) do
-    {:reply, :ok, %{state | stubs: [{{func, args}, result} | state.stubs]}}
+    arity = Enum.count(args)
+    if :erlang.function_exported(state.backup_module, func, arity) do
+      {:reply, :ok, %{state | stubs: [{{func, args}, result} | state.stubs]}}
+    else
+      error = %Mack.Error{module: state.module, func: func, arity: arity}
+      {:reply, {:error, error}, state}
+    end
   end
   def handle_call(:reset, _from, state) do
     {:reply, :ok, %{state | stubs: [], history: [] }}
@@ -107,7 +113,10 @@ defmodule Mack.Proxy do
   end
 
   def allow(module, func, args, result) do
-    GenServer.call(name(module), {:allow, func, args, result})
+    case GenServer.call(name(module), {:allow, func, args, result}) do
+      :ok -> :ok
+      {:error, error} -> raise error
+    end
   end
 
   def allow(module, func, result) when is_function(result) do

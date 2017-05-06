@@ -55,9 +55,9 @@ defmodule Mack.Test do
     end
 
     test "stub a function call that does not exist" do
-      allow(TestModule, :times, [2, 2], 9)
-
-      assert TestModule.times(2, 2) == 9
+      assert_raise Mack.Error, fn ->
+        allow(TestModule, :times, [2, 2], 9)
+      end
     end
 
     test "stub a function call with timeout" do
