@@ -16,6 +16,10 @@ defmodule Mack.Test do
   end
 
   describe "new/1" do
+    test "when new was already called" do
+      new TestModule
+    end
+
     test "has no stubs" do
       assert_raise UndefinedFunctionError, fn -> TestModule.sum(1, 2) end
     end
@@ -90,6 +94,17 @@ defmodule Mack.Test do
       end
 
       assert TestModule.sum(2, 3) == 6
+    end
+
+    test "stub a function call with same arguments" do
+      allow TestModule.sum(x, x) do
+        x * x
+      end
+      allow TestModule.sum(x, y) do
+        x + y
+      end
+
+      assert TestModule.sum(2, 3) == 5
     end
 
     test "stub a function call with a match and do" do
