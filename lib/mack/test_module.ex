@@ -1,3 +1,4 @@
 defmodule TestModule do
-  def sum(a, b), do: a + b
+  def add(x, y), do: x + y
+  def mult(x, y), do: x * y
 end

@@ -4,7 +4,7 @@ defmodule Mack do
   use Application
 
   defmodule Error do
-    defexception ~w(module func arity)a
+    defexception ~w(module fn_name arity)a
 
     def message(e) do
       "#{inspect(e.module)}.#{e.func}/#{e.arity} cannot be stubbed as original module does not export such function"
@@ -19,7 +19,17 @@ defmodule Mack do
     Supervisor.start_link(children, opts)
   end
 
-  def new(module, opts \\ []) do
+  def stub(module, fn_name, func) do
+    Mack.Proxy.stub(module, fn_name, func)
+    module
+  end
+
+  def expect(module, fn_name, func) do
+    # Mack.Proxy.expect(module, fn_name, func)
+    # module
+  end
+
+  def defmock(module, opts \\ []) do
     backup_module = backup_module(module)
     Mack.Module.replace!(module, backup_module)
     Mack.Supervisor.start_proxy(module, backup_module, opts)
@@ -27,61 +37,24 @@ defmodule Mack do
   end
 
   defp backup_module(module) do
-    "#{module}_backup_mack" |> String.to_atom
+    "#{module}_backup_mack" |> String.to_atom()
   end
 
-  def unload(module) do
-    Proxy.stop(module)
-    Mack.Module.clear!(module)
-  end
+  # def unload(module) do
+  # Proxy.stop(module)
+  # Mack.Module.clear!(module)
+  # end
 
-  @doc """
-  Reset stub and history on `module`
-  """
-  @spec reset(module) :: :ok
-  def reset(module), do: Proxy.reset(module)
+  def verify_on_exit!(_context \\ %{}) do
+    pid = self()
+    Mack.Proxy.verify_on_exit(pid)
 
-  @doc """
-  Return the history of calls that `module` received
-  """
-  @spec history(module) :: [{pid, atom, list, term}]
-  def history(module), do: Proxy.history(module)
-
-  @doc """
-  Check if `module.func(args)` was called and returned `result`
-  """
-  @spec received?(module, atom, list, term) :: boolean
-  def received?(module, func, args, result) do
-    Enum.find(Proxy.history(module), fn {_pid, ^func, ^args, {:value, ^result}} -> true
-                                        _ -> false
+    ExUnit.Callbacks.on_exit(Mack, fn ->
+      verify_mock_or_all!(pid, :all)
+      # Mack.Server.exit(pid) #?
     end)
   end
 
-  @doc """
-  allow `module` to receive to call `func` with `args` and returning `result
-  """
-  @spec allow(module, atom, list, term | function) :: :ok
-  def allow(module, func, args, result), do: Proxy.allow(module, func, args, result)
-
-  @doc """
-  allow `module` to receive to call `func` with `args` and returning `result
-  """
-  @spec allow(module, atom, list, function) :: :ok
-  def allow(module, func, result) when is_function(result), do: Proxy.allow(module, func, result)
-
-  @doc """
-  allow/2 can receive a do clause:
-
-  allow TestModule.sum(x, y) do
-    x * y
-  end
-  """
-  defmacro allow(call, do: clause) do
-    {{:., _, [module, func]}, _, args} = call
-    underscore_args = Enum.map(args, fn _x -> :_ end)
-    module = Macro.expand(module, __CALLER__)
-    quote do
-      allow(unquote(module), unquote(func), unquote(underscore_args), fn (unquote_splicing(args)) -> unquote(clause) end)
-    end
+  def verify_mock_or_all!(pid, :all) do
   end
 end
