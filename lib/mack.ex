@@ -3,6 +3,10 @@ defmodule Mack do
 
   use Application
 
+  defmodule UnexpectedCallError do
+    defexception [:message]
+  end
+
   defmodule Error do
     defexception ~w(module fn_name arity)a
 
