@@ -13,6 +13,14 @@ defmodule Mack.Test do
     assert TestModule.mult(2, 3) == 4
   end
 
+  test "stub redefining overrides" do
+    TestModule
+    |> stub(:add, fn x, _y -> x + 2 end)
+    |> stub(:add, fn x, _y -> x + 3 end)
+
+    assert TestModule.add(2, :undefined) == 5
+  end
+
   # FIXME
   test "expect" do
     TestModule

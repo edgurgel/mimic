@@ -4,13 +4,13 @@ defmodule Mack.Proxy do
   defmodule State do
     defstruct history: [],
               module: :undefined,
-              stubs: [],
+              stubs: %{},
               expectations: [],
               passthrough: true,
               backup_module: :undefined
   end
 
-  defmodule Stub do
+  defmodule Expectation do
     defstruct ~w(fn_name func arity owner)a
   end
 
@@ -45,8 +45,8 @@ defmodule Mack.Proxy do
 
   def handle_call({:apply, fn_name, args, arity}, {caller, _ref} = from, state) do
     result =
-      case find_result(fn_name, arity, caller, state.stubs) do
-        %Stub{func: func} -> {:ok, func}
+      case Map.get(state.stubs, {fn_name, arity, caller}) do
+        func when is_function(func) -> {:ok, func}
         nil -> :unexpected
       end
 
@@ -54,21 +54,23 @@ defmodule Mack.Proxy do
   end
 
   def handle_call({:stub, fn_name, func, arity, owner}, _from, state) do
-    stub = %Stub{fn_name: fn_name, func: func, arity: arity, owner: owner}
-
     if :erlang.function_exported(state.backup_module, fn_name, arity) do
-      {:reply, :ok, %{state | stubs: [stub | state.stubs]}}
+      {:reply, :ok, %{state | stubs: Map.put(state.stubs, {fn_name, arity, owner}, func) }}
     else
       error = %Mack.Error{module: state.module, fn_name: fn_name, arity: arity}
       {:reply, {:error, error}, state}
     end
   end
 
-  defp find_result(fn_name, arity, caller, stubs) do
-    Enum.find(stubs, fn
-      %Stub{fn_name: ^fn_name, arity: ^arity, owner: ^caller} -> true
-      _ -> false
-    end)
+  def handle_call({:expect, fn_name, func, arity, owner}, _from, state) do
+    expectation = %Expectation{fn_name: fn_name, func: func, arity: arity, owner: owner}
+
+    if :erlang.function_exported(state.backup_module, fn_name, arity) do
+      {:reply, :ok, %{state | expectations: state.expectations ++ [expectation]}}
+    else
+      error = %Mack.Error{module: state.module, fn_name: fn_name, arity: arity}
+      {:reply, {:error, error}, state}
+    end
   end
 
   def apply(module, fn_name, args) do
