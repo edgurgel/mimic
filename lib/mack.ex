@@ -11,7 +11,8 @@ defmodule Mack do
     defexception ~w(module fn_name arity)a
 
     def message(e) do
-      "#{inspect(e.module)}.#{e.func}/#{e.arity} cannot be stubbed as original module does not export such function"
+      mfa = Exception.format_mfa(e.module, e.fn_name, e.arity)
+      "#{mfa} cannot be stubbed as original module does not export such function"
     end
   end
 
@@ -34,14 +35,10 @@ defmodule Mack do
   end
 
   def defmock(module, opts \\ []) do
-    backup_module = backup_module(module)
+    backup_module = Mack.Proxy.backup_module(module)
     Mack.Module.replace!(module, backup_module)
     Mack.Supervisor.start_proxy(module, backup_module, opts)
     :ok
-  end
-
-  defp backup_module(module) do
-    "#{module}_backup_mack" |> String.to_atom()
   end
 
   # def unload(module) do

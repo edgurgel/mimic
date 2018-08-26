@@ -4,6 +4,7 @@ defmodule Mack.Proxy do
   defmodule State do
     defstruct history: [],
               module: :undefined,
+              pids: MapSet.new,
               stubs: %{},
               expectations: %{},
               passthrough: true,
@@ -44,54 +45,58 @@ defmodule Mack.Proxy do
   end
 
   defp find_stub(stubs, fn_name, arity, caller) do
-    case Map.get(stubs, {fn_name, arity, caller}) do
-      func when is_function(func) -> func
+    case get_in(stubs, [caller, {fn_name, arity}]) do
+      func when is_function(func) -> {:ok, func}
       nil -> :unexpected
     end
   end
 
   def handle_call({:apply, fn_name, args, arity}, {caller, _ref} = from, state) do
-    case Map.get(state.expectations, {fn_name, arity, caller}) do
-      [%Expectation{func: func} | tail] ->
-        {:reply, {:ok, func}, state}
-      nil ->
-        func = find_stub(state.stubs, fn_name, arity, caller)
-        {:reply, {:ok, func}, state}
+    if MapSet.member?(state.pids, caller) do
+      case get_in(state.expectations, [Access.key(caller, %{}), {fn_name, arity}]) do
+        [%Expectation{func: func} | tail] ->
+          expectations = put_in(state.expectations, [caller, {fn_name, arity}], tail)
+          {:reply, {:ok, func}, %{state | expectations: expectations}}
+        _ ->
+          result = find_stub(state.stubs, fn_name, arity, caller)
+          {:reply, result, state}
+      end
+    else
+      {:reply, :original, state}
     end
   end
 
   def handle_call({:stub, fn_name, func, arity, owner}, _from, state) do
-    if :erlang.function_exported(state.backup_module, fn_name, arity) do
-      {:reply, :ok, %{state | stubs: Map.put(state.stubs, {fn_name, arity, owner}, func) }}
-    else
-      error = %Mack.Error{module: state.module, fn_name: fn_name, arity: arity}
-      {:reply, {:error, error}, state}
-    end
+    {:reply, :ok, %{state | stubs: put_in(state.stubs, [Access.key(owner, %{}), {fn_name, arity}], func),
+                            pids: MapSet.put(state.pids, owner)}}
   end
 
   def handle_call({:expect, fn_name, func, arity, owner}, _from, state) do
     expectation = %Expectation{fn_name: fn_name, func: func, arity: arity}
 
-    if :erlang.function_exported(state.backup_module, fn_name, arity) do
-      expectations = update_in(state.expectations, [{fn_name, arity, owner}], & (&1 || []) ++ [expectation])
-      {:reply, :ok, %{state | expectations: expectations}}
-    else
-      error = %Mack.Error{module: state.module, fn_name: fn_name, arity: arity}
-      {:reply, {:error, error}, state}
-    end
+    expectations = update_in(state.expectations, [Access.key(owner, %{}), {fn_name, arity}], & (&1 || []) ++ [expectation])
+    {:reply, :ok, %{state | expectations: expectations, pids: MapSet.put(state.pids, owner)}}
   end
 
   def apply(module, fn_name, args) do
     arity = Enum.count(args)
+    backup_module = backup_module(module)
 
-    case GenServer.call(name(module), {:apply, fn_name, args, arity}, :infinity) do
-      {:ok, func} ->
-        Kernel.apply(func, args)
+    if :erlang.function_exported(backup_module, fn_name, arity) do
+      case GenServer.call(name(module), {:apply, fn_name, args, arity}, :infinity) do
+        {:ok, func} ->
+          Kernel.apply(func, args)
 
-      :unexpected ->
-        mfa = Exception.format_mfa(module, fn_name, arity)
+        :original ->
+          Kernel.apply(backup_module(module), fn_name, args)
 
-        raise Mack.UnexpectedCallError, "Unexpected call to #{mfa} from #{inspect(self())}"
+        :unexpected ->
+          mfa = Exception.format_mfa(module, fn_name, arity)
+
+          raise Mack.UnexpectedCallError, "Unexpected call to #{mfa} from #{inspect(self())}"
+      end
+    else
+      raise Mack.Error, module: module, fn_name: fn_name, arity: arity
     end
   end
 
@@ -100,6 +105,10 @@ defmodule Mack.Proxy do
   """
   @spec name(module) :: module
   def name(module), do: Module.concat(Mack.Proxy, module)
+
+  def backup_module(module) do
+    "#{module}_backup_mack" |> String.to_atom()
+  end
 
   @doc false
   defmacro __using__(_) do
