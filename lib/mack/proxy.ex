@@ -5,13 +5,13 @@ defmodule Mack.Proxy do
     defstruct history: [],
               module: :undefined,
               stubs: %{},
-              expectations: [],
+              expectations: %{},
               passthrough: true,
               backup_module: :undefined
   end
 
   defmodule Expectation do
-    defstruct ~w(fn_name func arity owner)a
+    defstruct ~w(fn_name func arity)a
   end
 
   def stub(module, fn_name, func) do
@@ -43,14 +43,21 @@ defmodule Mack.Proxy do
     {:noreply, state}
   end
 
-  def handle_call({:apply, fn_name, args, arity}, {caller, _ref} = from, state) do
-    result =
-      case Map.get(state.stubs, {fn_name, arity, caller}) do
-        func when is_function(func) -> {:ok, func}
-        nil -> :unexpected
-      end
+  defp find_stub(stubs, fn_name, arity, caller) do
+    case Map.get(stubs, {fn_name, arity, caller}) do
+      func when is_function(func) -> func
+      nil -> :unexpected
+    end
+  end
 
-    {:reply, result, state}
+  def handle_call({:apply, fn_name, args, arity}, {caller, _ref} = from, state) do
+    case Map.get(state.expectations, {fn_name, arity, caller}) do
+      [%Expectation{func: func} | tail] ->
+        {:reply, {:ok, func}, state}
+      nil ->
+        func = find_stub(state.stubs, fn_name, arity, caller)
+        {:reply, {:ok, func}, state}
+    end
   end
 
   def handle_call({:stub, fn_name, func, arity, owner}, _from, state) do
@@ -63,10 +70,11 @@ defmodule Mack.Proxy do
   end
 
   def handle_call({:expect, fn_name, func, arity, owner}, _from, state) do
-    expectation = %Expectation{fn_name: fn_name, func: func, arity: arity, owner: owner}
+    expectation = %Expectation{fn_name: fn_name, func: func, arity: arity}
 
     if :erlang.function_exported(state.backup_module, fn_name, arity) do
-      {:reply, :ok, %{state | expectations: state.expectations ++ [expectation]}}
+      expectations = update_in(state.expectations, [{fn_name, arity, owner}], & (&1 || []) ++ [expectation])
+      {:reply, :ok, %{state | expectations: expectations}}
     else
       error = %Mack.Error{module: state.module, fn_name: fn_name, arity: arity}
       {:reply, {:error, error}, state}

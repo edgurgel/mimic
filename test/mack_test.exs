@@ -27,7 +27,7 @@ defmodule Mack.Test do
     |> expect(:add, fn x, _y -> x + 2 end)
     |> expect(:mult, fn x, _y -> x * 2 end)
 
-    assert TestModule.add(2, 3) == 5
-    assert TestModule.mult(2, 3) == 6
+    assert TestModule.add(4, :_) == 6
+    assert TestModule.mult(5, :_) == 10
   end
 end

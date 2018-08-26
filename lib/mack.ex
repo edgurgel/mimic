@@ -29,8 +29,8 @@ defmodule Mack do
   end
 
   def expect(module, fn_name, func) do
-    # Mack.Proxy.expect(module, fn_name, func)
-    # module
+    Mack.Proxy.expect(module, fn_name, func)
+    module
   end
 
   def defmock(module, opts \\ []) do
