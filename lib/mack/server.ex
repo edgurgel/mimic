@@ -61,25 +61,33 @@ defmodule Mack.Server do
   end
 
   def handle_call({:stub, module, fn_name, func, arity, owner}, _from, state) do
-    {:reply, :ok,
-     %{
-       state
-       | stubs: put_in(state.stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func),
-         pids: MapSet.put(state.pids, owner)
-     }}
+    if MapSet.member?(state.modules, module) do
+      {:reply, :ok,
+       %{
+         state
+         | stubs: put_in(state.stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func),
+           pids: MapSet.put(state.pids, owner)
+       }}
+    else
+      {:reply, {:error, :not_mocked}, state}
+    end
   end
 
   def handle_call({:expect, module, fn_name, func, arity, owner}, _from, state) do
-    expectation = %Expectation{fn_name: fn_name, func: func, arity: arity}
+    if MapSet.member?(state.modules, module) do
+      expectation = %Expectation{fn_name: fn_name, func: func, arity: arity}
 
-    expectations =
-      update_in(
-        state.expectations,
-        [Access.key(owner, %{}), {module, fn_name, arity}],
-        &((&1 || []) ++ [expectation])
-      )
+      expectations =
+        update_in(
+          state.expectations,
+          [Access.key(owner, %{}), {module, fn_name, arity}],
+          &((&1 || []) ++ [expectation])
+        )
 
-    {:reply, :ok, %{state | expectations: expectations, pids: MapSet.put(state.pids, owner)}}
+      {:reply, :ok, %{state | expectations: expectations, pids: MapSet.put(state.pids, owner)}}
+    else
+      {:reply, {:error, :not_mocked}, state}
+    end
   end
 
   def handle_call({:mock, module}, _from, state) do

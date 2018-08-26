@@ -49,4 +49,8 @@ defmodule Mack.Test do
     assert Calculator.mult(5, :_) == 10
     assert_raise Mack.UnexpectedCallError, fn -> Calculator.mult(5, :_) == 10 end
   end
+
+  test "expecting when no defmock not called" do
+    assert_raise Mack.UnexpectedCallError, fn -> expect(Date, :add, fn x, _y -> x + 2 end) end
+  end
 end

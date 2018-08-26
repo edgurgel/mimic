@@ -22,13 +22,17 @@ defmodule Mack do
   end
 
   def stub(module, fn_name, func) do
-    Server.stub(module, fn_name, func)
-    module
+    case Server.stub(module, fn_name, func) do
+      :ok -> module
+      {:error, :not_mocked} -> raise UnexpectedCallError, "Module #{module} not mocked"
+    end
   end
 
   def expect(module, fn_name, func) do
-    Server.expect(module, fn_name, func)
-    module
+    case Server.expect(module, fn_name, func) do
+      :ok -> module
+      {:error, :not_mocked} -> raise UnexpectedCallError, "Module #{module} not mocked"
+    end
   end
 
   def defmock(module) do
@@ -48,12 +52,9 @@ defmodule Mack do
     pid = self()
     Mack.Proxy.verify_on_exit(pid)
 
-    ExUnit.Callbacks.on_exit(Mack, fn ->
-      verify_mock_or_all!(pid, :all)
-      # Mack.Server.exit(pid) #?
-    end)
-  end
-
-  def verify_mock_or_all!(pid, :all) do
+    # ExUnit.Callbacks.on_exit(Mack, fn ->
+    # verify_mock_or_all!(pid, :all)
+    # Mack.Server.exit(pid) #?
+    # end)
   end
 end
