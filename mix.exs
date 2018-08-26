@@ -13,7 +13,10 @@ defmodule Mack.Mixfile do
   end
 
   def application do
-    [applications: [:logger], mod: {Mack, []}]
+    [
+      extra_applications: [:logger],
+      mod: {Mack, []}
+    ]
   end
 
   defp deps do

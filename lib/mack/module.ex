@@ -22,7 +22,7 @@ defmodule Mack.Module do
   def replace!(module, backup_module) do
     contents =
       quote do
-        use Mack.Proxy
+        use Mack.Server
       end
 
     rename_module(module, backup_module)

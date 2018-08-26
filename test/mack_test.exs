@@ -4,43 +4,49 @@ defmodule Mack.Test do
 
   # setup :verify_on_exit!
   test "no stubs" do
-    assert TestModule.add(2, 2) == 4
-    assert TestModule.mult(2, 3) == 6
+    assert Calculator.add(2, 2) == 4
+    assert Calculator.mult(2, 3) == 6
   end
 
   test "stub" do
-    TestModule
+    Calculator
     |> stub(:add, fn x, _y -> x + 2 end)
     |> stub(:mult, fn x, _y -> x * 2 end)
 
-    assert TestModule.add(2, :undefined) == 4
-    assert TestModule.mult(2, 3) == 4
+    Counter
+    |> stub(:inc, fn x -> x + 7 end)
+    |> stub(:add, fn counter, x -> counter + x + 7 end)
+
+    assert Calculator.add(2, :undefined) == 4
+    assert Calculator.mult(2, 3) == 4
+    assert Counter.inc(3) == 10
+    assert Counter.add(3, 10) == 20
   end
 
   test "stub redefining overrides" do
-    TestModule
+    Calculator
     |> stub(:add, fn x, _y -> x + 2 end)
     |> stub(:add, fn x, _y -> x + 3 end)
 
-    assert TestModule.add(2, :undefined) == 5
+    assert Calculator.add(2, :undefined) == 5
   end
 
   test "expect" do
-    TestModule
+    Calculator
     |> expect(:add, fn x, _y -> x + 2 end)
     |> expect(:mult, fn x, _y -> x * 2 end)
 
-    assert TestModule.add(4, :_) == 6
-    assert TestModule.mult(5, :_) == 10
+    assert Calculator.add(4, :_) == 6
+    assert Calculator.mult(5, :_) == 10
   end
 
   test "expecting when no expectation is defined" do
-    TestModule
+    Calculator
     |> expect(:add, fn x, _y -> x + 2 end)
     |> expect(:mult, fn x, _y -> x * 2 end)
 
-    assert TestModule.add(4, :_) == 6
-    assert TestModule.mult(5, :_) == 10
-    assert_raise Mack.UnexpectedCallError, fn -> TestModule.mult(5, :_) == 10 end
+    assert Calculator.add(4, :_) == 6
+    assert Calculator.mult(5, :_) == 10
+    assert_raise Mack.UnexpectedCallError, fn -> Calculator.mult(5, :_) == 10 end
   end
 end

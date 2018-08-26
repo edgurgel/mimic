@@ -1,7 +1,5 @@
 defmodule Mack do
-  alias Mack.Proxy
-
-  use Application
+  alias Mack.Server
 
   defmodule UnexpectedCallError do
     defexception [:message]
@@ -16,28 +14,28 @@ defmodule Mack do
     end
   end
 
-  @doc false
-  def start(_type, _args) do
-    import Supervisor.Spec, warn: false
-    children = [supervisor(Mack.Supervisor, [])]
-    opts = [strategy: :one_for_one, name: __MODULE__]
-    Supervisor.start_link(children, opts)
+  use Application
+
+  def start(_, _) do
+    children = [Mack.Server]
+    Supervisor.start_link(children, name: Mack.Supervisor, strategy: :one_for_one)
   end
 
   def stub(module, fn_name, func) do
-    Mack.Proxy.stub(module, fn_name, func)
+    Server.stub(module, fn_name, func)
     module
   end
 
   def expect(module, fn_name, func) do
-    Mack.Proxy.expect(module, fn_name, func)
+    Server.expect(module, fn_name, func)
     module
   end
 
-  def defmock(module, opts \\ []) do
-    backup_module = Mack.Proxy.backup_module(module)
-    Mack.Module.replace!(module, backup_module)
-    Mack.Supervisor.start_proxy(module, backup_module, opts)
+  def defmock(module) do
+    original_module = Server.original_module(module)
+    Mack.Module.replace!(module, original_module)
+    Mack.Server.mock(module)
+
     :ok
   end
 
