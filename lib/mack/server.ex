@@ -9,11 +9,15 @@ defmodule Mack.Server do
   end
 
   defmodule Expectation do
-    defstruct ~w(fn_name func arity)a
+    defstruct ~w(func)a
   end
 
   def mock(module) do
     GenServer.call(__MODULE__, {:mock, module})
+  end
+
+  def verify(pid) do
+    GenServer.call(__MODULE__, {:verify, pid})
   end
 
   def stub(module, fn_name, func) do
@@ -75,7 +79,7 @@ defmodule Mack.Server do
 
   def handle_call({:expect, module, fn_name, func, arity, owner}, _from, state) do
     if MapSet.member?(state.modules, module) do
-      expectation = %Expectation{fn_name: fn_name, func: func, arity: arity}
+      expectation = %Expectation{func: func}
 
       expectations =
         update_in(
@@ -92,6 +96,17 @@ defmodule Mack.Server do
 
   def handle_call({:mock, module}, _from, state) do
     {:reply, :ok, %{state | modules: MapSet.put(state.modules, module)}}
+  end
+
+  def handle_call({:verify, pid}, _from, state) do
+    expectations = state.expectations[pid] || %{}
+
+    pending =
+      for {{module, fn_name, arity}, mfa_expectations} <- expectations,
+          _mfa_expectation <- mfa_expectations do
+            {module, fn_name, arity}
+      end
+    {:reply, pending, state}
   end
 
   def apply(module, fn_name, args) do

@@ -5,6 +5,10 @@ defmodule Mack do
     defexception [:message]
   end
 
+  defmodule VerificationError do
+    defexception [:message]
+  end
+
   defmodule Error do
     defexception ~w(module fn_name arity)a
 
@@ -17,7 +21,7 @@ defmodule Mack do
   use Application
 
   def start(_, _) do
-    children = [Mack.Server]
+    children = [Server]
     Supervisor.start_link(children, name: Mack.Supervisor, strategy: :one_for_one)
   end
 
@@ -38,23 +42,25 @@ defmodule Mack do
   def defmock(module) do
     original_module = Server.original_module(module)
     Mack.Module.replace!(module, original_module)
-    Mack.Server.mock(module)
+    Server.mock(module)
 
     :ok
   end
 
-  # def unload(module) do
-  # Proxy.stop(module)
-  # Mack.Module.clear!(module)
-  # end
+  def verify(pid) do
+    pending = Server.verify(pid)
 
-  def verify_on_exit!(_context \\ %{}) do
-    pid = self()
-    Mack.Proxy.verify_on_exit(pid)
+    messages =
+      for {module, name, arity} <- pending do
+        mfa = Exception.format_mfa(module, name, arity)
+        "  * expected #{mfa} to be invoked"
+      end
 
-    # ExUnit.Callbacks.on_exit(Mack, fn ->
-    # verify_mock_or_all!(pid, :all)
-    # Mack.Server.exit(pid) #?
-    # end)
+    if messages != [] do
+      raise VerificationError,
+            "error while verifying mocks for #{inspect(pid)}:\n\n" <> Enum.join(messages, "\n")
+    end
+
+    :ok
   end
 end

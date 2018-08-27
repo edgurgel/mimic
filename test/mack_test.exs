@@ -40,6 +40,14 @@ defmodule Mack.Test do
     assert Calculator.mult(5, :_) == 10
   end
 
+  test "expectation not being fulfilled" do
+    Calculator
+    |> expect(:add, fn x, _y -> x + 2 end)
+    |> expect(:mult, fn x, _y -> x * 2 end)
+
+    assert_raise Mack.VerificationError, fn -> verify(self()) end
+  end
+
   test "expecting when no expectation is defined" do
     Calculator
     |> expect(:add, fn x, _y -> x + 2 end)
