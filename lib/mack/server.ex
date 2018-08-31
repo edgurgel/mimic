@@ -36,6 +36,18 @@ defmodule Mack.Server do
 
   def init([]), do: {:ok, %State{}}
 
+  defp handle_down(pid, state) do
+    expectations = Map.delete(state.expectations, pid)
+    stubs = Map.delete(state.stubs, pid)
+    pids = MapSet.delete(state.pids, pid)
+    %{ state | expectations: expectations, stubs: stubs, pids: pids }
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    new_state = handle_down(pid, state)
+    {:noreply, new_state}
+  end
+
   def handle_info(msg, state) do
     IO.puts("handle_info with #{inspect(msg)} not handled")
     {:noreply, state}
@@ -70,7 +82,7 @@ defmodule Mack.Server do
        %{
          state
          | stubs: put_in(state.stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func),
-           pids: MapSet.put(state.pids, owner)
+           pids: monitor_pid!(owner, state.pids)
        }}
     else
       {:reply, {:error, :not_mocked}, state}
@@ -88,7 +100,8 @@ defmodule Mack.Server do
           &((&1 || []) ++ [expectation])
         )
 
-      {:reply, :ok, %{state | expectations: expectations, pids: MapSet.put(state.pids, owner)}}
+        MapSet.put(state.pids, owner)
+      {:reply, :ok, %{state | expectations: expectations, pids: monitor_pid!(owner, state.pids) }}
     else
       {:reply, {:error, :not_mocked}, state}
     end
@@ -107,6 +120,15 @@ defmodule Mack.Server do
             {module, fn_name, arity}
       end
     {:reply, pending, state}
+  end
+
+  defp monitor_pid!(pid, pids) do
+    unless MapSet.member?(pids, pid) do
+      Process.monitor(pid)
+      MapSet.put(pids, pid)
+    else
+      pids
+    end
   end
 
   def apply(module, fn_name, args) do

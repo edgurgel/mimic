@@ -47,7 +47,22 @@ defmodule Mack do
     :ok
   end
 
-  def verify(pid) do
+  @doc """
+  Verifies the current process after it exits.
+
+  If you want to verify expectations for all tests, you can use
+  `verify_on_exit!/1` as a setup callback:
+
+      setup :verify_on_exit!
+
+  """
+  def verify_on_exit!(_context \\ %{}) do
+    pid = self()
+
+    ExUnit.Callbacks.on_exit(Mack, fn -> verify!(pid) end)
+  end
+
+  def verify!(pid \\ self()) do
     pending = Server.verify(pid)
 
     messages =
