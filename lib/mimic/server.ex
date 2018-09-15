@@ -315,7 +315,11 @@ defmodule Mimic.Server do
   end
 
   defp stub_function(module, fn_name, arity) do
-    args = 0..arity |> Enum.to_list() |> tl |> Enum.map(fn i -> Macro.var(:"arg_#{i}", nil) end)
+    args =
+      0..arity
+      |> Enum.to_list()
+      |> tl
+      |> Enum.map(fn i -> Macro.var(String.to_atom("arg_#{i}"), nil) end)
 
     clause =
       quote do

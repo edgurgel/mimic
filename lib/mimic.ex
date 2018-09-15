@@ -1,62 +1,119 @@
 defmodule Mimic do
   @moduledoc """
-  Mimic is a library that simplifies the usage of mocks.
+  Mimic is a library that simplifies the usage of mocks in Elixir.
 
-  Modules need to be prepared so that they can be used.
+  Mimic is mostly API compatible with [mox](https://hex.pm/packages/mox) but
+  doesn't require explicit contract checking with behaviours.  It's also faster.
+  You're welcome.
 
-  You must first call `copy` in your `test_helper.exs` for
-  each module that may have the behaviour changed.
+  Mimic works by copying your module out of the way and replacing it with one of
+  it's own which can delegate calls back to the original or to a mock function
+  as required.
 
-  ```
+  In order to prepare a module for mocking you must call `copy/1` with the
+  module as an argument.  We suggest that you do this in your
+  `test/test_helper.exs`:
+
+  ```elixir
   Mimic.copy(Calculator)
-
   ExUnit.start()
   ```
 
-  Calling `copy` will not change the behaviour of the module.
+  Importantly calling `copy/1` will not change the behaviour of the module. When
+  writing tests you can then use `stub/3` or `expect/3` to add mocks and
+  assertions.
 
-  The user must call `stub/3` or `expect/3` so that the functions will
-  behave differently.
+  ## Multi-process collaboration
+
+  Mimic supports multi-process collaboration via two mechanisms:
+
+    1. Explicit allows.
+    2. Global mode.
+
+  Using explicit allows is generally preferred as these stubs can be run
+  concurrently, whereas global mode tests must be run exclusively.
+
+  ## Explicit allows
+
+  Using `allow/3` you can give other processes permission to use stubs and
+  expectations from where they were not defined.
+
+  ```elixir
+  test "invokes add from a task" do
+    Caculator
+    |> expect(:add, fn x, y -> x + y end)
+
+    parent_pid = self()
+
+    Task.async(fn ->
+      Calculator |> allow(parent_pid, self())
+      assert Calculator.add(2, 3) == 5
+    end)
+    |> Task.await
+  end
+  ```
+
+  ## Global mode
+
+  When set in global mode any process is able to call the stubs and expectations
+  defined in your tests.
+
+  **Warning: Using global mode disables `async: true` in your tests**
+
+  Enable global mode using `set_mimic_global/1`.
+
+  ```elixir
+  setup :set_mimic_global
+  setup :verify_on_exit!
+
+  test "invokes add from a task" do
+    Calculator
+    |> expect(:add, fn x, y -> x + y end)
+
+    Task.async(fn ->
+      assert Calculator.add(2, 3) == 5
+    end)
+    |> Task.await
+  end
+  ```
+
+  The global mode must always be explicitly set per test. By default mocks run
+  in private mode.
   """
-  alias Mimic.Server
-
-  defmodule UnexpectedCallError do
-    defexception [:message]
-  end
-
-  defmodule VerificationError do
-    defexception [:message]
-  end
-
-  defmodule Error do
-    defexception ~w(module fn_name arity)a
-
-    def message(e) do
-      mfa = Exception.format_mfa(e.module, e.fn_name, e.arity)
-      "#{mfa} cannot be stubbed as original module does not export such function"
-    end
-  end
-
-  use Application
-
-  def start(_, _) do
-    children = [Server]
-    Supervisor.start_link(children, name: Mimic.Supervisor, strategy: :one_for_one)
-  end
+  alias ExUnit.Callbacks
+  alias Mimic.{Server, VerificationError}
 
   @doc """
-  To allow `Calculator.add/2` to be called:
+  Define a stub function for a copied module.
 
-    stub(Calculator, :add, fn x, y -> x + y end)
+  ## Arguments:
+
+    * `module` - the name of the module in which we're adding the stub.
+    * `function_name` - the name of the function we're stubbing.
+    * `function` - the function to use as a replacement.
+
+  ## Raises:
+
+    * If `module` is not copied.
+    * If `function_name` is not publicly exported from `module` with the same arity.
+
+  ## Example
+
+        iex> Calculator.add(2, 4)
+        6
+
+        iex> Mimic.stub(Calculator, :add, fn x, y -> x * y end)
+        ...> Calculator.add(2, 4)
+        8
 
   """
-  @spec stub(atom, atom, function) :: module
-  def stub(module, fn_name, func) do
-    arity = :erlang.fun_info(func)[:arity]
-    raise_if_not_mocked!(module)
-    raise_if_not_exported_function!(module, fn_name, arity)
+  @spec stub(module(), atom(), function()) :: module
+  def stub(module, function_name, function) do
+    arity = :erlang.fun_info(function)[:arity]
+    raise_if_not_copied!(module)
+    raise_if_not_exported_function!(module, function_name, arity)
 
-    case Server.stub(module, fn_name, arity, func) do
+    case Server.stub(module, function_name, arity, function) do
       :ok ->
         module
 
@@ -66,8 +123,31 @@ defmodule Mimic do
     end
   end
 
+  @doc """
+  Replace all public functions in `module` with stubs.
+
+  The stubbed functions will raise if they are called.
+
+  ## Arguments:
+
+    * `module` - The name of the module to stub.
+
+  ## Raises:
+
+    * If `module` is not copied.
+
+  ## Example
+
+      iex> Mimic.stub(Calculator)
+      ...> Calculator.add(2, 4)
+      ** (ArgumentError) Module Calculator has not been copied.  See docs for Mimic.copy/1
+          (mimic) lib/mimic.ex:129: Mimic.raise_if_not_copied!/1
+          (mimic) lib/mimic.ex:92: Mimic.stub/1
+
+  """
+  @spec stub(module()) :: module()
   def stub(module) do
-    raise_if_not_mocked!(module)
+    raise_if_not_copied!(module)
 
     case Server.stub(module) do
       :ok ->
@@ -80,11 +160,33 @@ defmodule Mimic do
   end
 
   @doc """
-  To expect `Calculator.add/2` to be called:
+  Define a stub which must be called within an example.
 
-    expect(Calculator, :add, fn x, y -> x + y end)
+  This function is almost identical to `stub/3` except that the replacement
+  function must be called within the lifetime of the calling `pid` (i.e. the
+  test example).
 
-  If this function is not called the verification step will raise
+  ## Arguments:
+
+    * `module` - the name of the module in which we're adding the stub.
+    * `function_name` - the name of the function we're stubbing.
+    * `function` - the function to use as a replacement.
+
+  ## Raises:
+
+    * If `module` is not copied.
+    * If `function_name` is not publicly exported from `module` with the same
+      arity.
+    * If `function` is not called by the stubbing process.
+
+  ## Example
+
+        iex> Calculator.add(2, 4)
+        6
+
+        iex> Mimic.expect(Calculator, :add, fn x, y -> x * y end)
+        ...> Calculator.add(2, 4)
+        8
   """
   @spec expect(atom, atom, non_neg_integer, function) :: module
   def expect(module, fn_name, num_calls \\ 1, func)
@@ -97,7 +199,7 @@ defmodule Mimic do
       when is_atom(module) and is_atom(fn_name) and is_integer(num_calls) and num_calls >= 1 and
              is_function(func) do
     arity = :erlang.fun_info(func)[:arity]
-    raise_if_not_mocked!(module)
+    raise_if_not_copied!(module)
     raise_if_not_exported_function!(module, fn_name, arity)
 
     case Server.expect(module, fn_name, arity, num_calls, func) do
@@ -136,27 +238,42 @@ defmodule Mimic do
     end
   end
 
-  defp raise_if_not_mocked!(module) do
-    unless function_exported?(module, :__mimic_info__, 0) do
-      raise ArgumentError, "Module #{inspect(module)} not mocked"
-    end
-  end
-
-  defp raise_if_not_exported_function!(module, fn_name, arity) do
-    unless function_exported?(module, fn_name, arity) do
-      raise ArgumentError, "Function #{fn_name}/#{arity} not defined for #{inspect(module)}"
-    end
-  end
-
   @doc """
-  Allows other processes to share expectations and stubs defined by another process.
+  Allow other processes to share expectations and stubs defined by another
+  process.
 
-  ## Examples
-  To allow `other_pid` to call any stubs or expectations defined for `Calculator`:
+  ## Arguments:
 
-      allow(Calculator, self(), other_pid)
+    * `module` - the copied module.
+    * `owner_pid` - the process ID of the process which created the stub.
+    * `allowed_pid` - the process ID of the process which should also be allowed
+      to use this stub.
 
+  ## Raises:
+
+    * If Mimic is running in global mode.
+
+  Allows other processes to share expectations and stubs defined by another
+  process.
+
+  ## Example
+
+  ```elixir
+  test "invokes add from a task" do
+    Caculator
+    |> expect(:add, fn x, y -> x + y end)
+
+    parent_pid = self()
+
+    Task.async(fn ->
+      Calculator |> allow(parent_pid, self())
+      assert Calculator.add(2, 3) == 5
+    end)
+    |> Task.await
+  end
+  ```
   """
+  @spec allow(module(), pid(), pid()) :: module() | {:error, atom()}
   def allow(module, owner_pid, allowed_pid) do
     case Server.allow(module, owner_pid, allowed_pid) do
       :ok ->
@@ -168,9 +285,14 @@ defmodule Mimic do
   end
 
   @doc """
-  Define `module` to be able to mock functions
+  Prepare `module` for mocking.
+
+  ## Arguments:
+
+    * `module` - the name of the module to copy.
+
   """
-  @spec copy(atom) :: :ok
+  @spec copy(module()) :: :ok
   def copy(module) do
     if not Code.ensure_compiled?(module) do
       raise ArgumentError,
@@ -189,49 +311,58 @@ defmodule Mimic do
   If you want to verify expectations for all tests, you can use
   `verify_on_exit!/1` as a setup callback:
 
-      setup :verify_on_exit!
-
+  ```elixir
+  setup :verify_on_exit!
+  ```
   """
+  @spec verify_on_exit!(map()) :: :ok | no_return()
   def verify_on_exit!(_context \\ %{}) do
     pid = self()
 
     Server.verify_on_exit(pid)
 
-    ExUnit.Callbacks.on_exit(Mimic, fn ->
+    Callbacks.on_exit(Mimic, fn ->
       verify!(pid)
       Server.exit(pid)
     end)
   end
 
   @doc """
-  Sets the mode to private. Mocks can be set and user by the process
+  Sets the mode to private. Mocks can be set and used by the process
 
-      setup :set_mimic_private
-
+  ```elixir
+  setup :set_mimic_private
+  ```
   """
+  @spec set_mimic_private(map()) :: :ok
   def set_mimic_private(_context \\ %{}), do: Server.set_private_mode()
 
   @doc """
   Sets the mode to global. Mocks can be set and used by all processes
 
-      setup :set_mimic_global
-
+  ```elixir
+  setup :set_mimic_global
+  ```
   """
+  @spec set_mimic_global(map()) :: :ok
   def set_mimic_global(_context \\ %{}), do: Server.set_global_mode(self())
 
   @doc """
   Chooses the mode based on ExUnit context. If `async` is `true` then
-  the mode is private, otherwise global
+  the mode is private, otherwise global.
 
-      setup :set_mimic_from_context
-
+  ```elixir
+  setup :set_mimic_from_context
+  ```
   """
-  def set_mimic_from_context(%{async: true} = _context), do: set_mimic_private()
+  @spec set_mimic_from_context(map()) :: :ok
+  def set_mimic_from_context(%{async: true}), do: set_mimic_private()
   def set_mimic_from_context(_context), do: set_mimic_global()
 
   @doc """
   Verify if expectations were fulfilled for a process `pid`
   """
+  @spec verify!(pid()) :: :ok
   def verify!(pid \\ self()) do
     pending = Server.verify(pid)
 
@@ -249,5 +380,18 @@ defmodule Mimic do
     end
 
     :ok
+  end
+
+  defp raise_if_not_copied!(module) do
+    unless function_exported?(module, :__mimic_info__, 0) do
+      raise ArgumentError,
+            "Module #{inspect(module)} has not been copied.  See docs for Mimic.copy/1"
+    end
+  end
+
+  defp raise_if_not_exported_function!(module, fn_name, arity) do
+    unless function_exported?(module, fn_name, arity) do
+      raise ArgumentError, "Function #{fn_name}/#{arity} not defined for #{inspect(module)}"
+    end
   end
 end

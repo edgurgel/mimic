@@ -20,7 +20,7 @@ defmodule Mimic.Mixfile do
   def application do
     [
       extra_applications: [:logger],
-      mod: {Mimic, []}
+      mod: {Mimic.Application, []}
     ]
   end
 
@@ -28,7 +28,10 @@ defmodule Mimic.Mixfile do
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
-    [{:ex_doc, "== 0.18.4", only: :dev}]
+    [
+      {:ex_doc, "~> 0.19", only: :dev},
+      {:credo, "~> 0.10.0", only: :dev}
+    ]
   end
 
   defp package do

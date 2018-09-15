@@ -1,4 +1,5 @@
 defmodule Mimic.Module do
+  alias Mimic.Server
   @moduledoc false
 
   def original(module), do: "#{module}.Mimic.Original.Module" |> String.to_atom()
@@ -31,6 +32,9 @@ defmodule Mimic.Module do
         {:ok, {_, [{:abstract_code, {:raw_abstract_v1, forms}}]}} -> forms
         {:ok, {_, [{:abstract_code, :no_abstract_code}]}} -> throw(:no_abstract_code)
       end
+
+    result =
+      result
       |> rename_attribute(new_module)
 
     case :compile.forms(result, [:return_errors]) do
@@ -38,7 +42,7 @@ defmodule Mimic.Module do
         load_binary(module_name, binary)
         binary
 
-      {:ok, module_name, binary, _Warnings} ->
+      {:ok, module_name, binary, _warnings} ->
         load_binary(module_name, binary)
         Binary
 
@@ -72,7 +76,7 @@ defmodule Mimic.Module do
     module
   end
 
-  defp module_mimic_info() do
+  defp module_mimic_info do
     quote do: def(__mimic_info__, do: :ok)
   end
 
@@ -81,11 +85,15 @@ defmodule Mimic.Module do
 
     for {fn_name, arity} <- module.module_info(:exports),
         {fn_name, arity} not in internal_functions do
-      args = 0..arity |> Enum.to_list() |> tl() |> Enum.map(&Macro.var(:"arg_#{&1}", Elixir))
+      args =
+        0..arity
+        |> Enum.to_list()
+        |> tl()
+        |> Enum.map(&Macro.var(String.to_atom("arg_#{&1}"), Elixir))
 
       quote do
         def unquote(fn_name)(unquote_splicing(args)) do
-          Mimic.Server.apply(__MODULE__, unquote(fn_name), unquote(args))
+          Server.apply(__MODULE__, unquote(fn_name), unquote(args))
         end
       end
     end
