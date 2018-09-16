@@ -439,9 +439,11 @@ defmodule Mimic.Test do
     end
 
     test "raises if a non copied module is given" do
-      assert_raise ArgumentError, "Module String not mocked", fn ->
-        expect(String, :split, fn x, y -> x + y end)
-      end
+      assert_raise ArgumentError,
+                   "Module String has not been copied.  See docs for Mimic.copy/1",
+                   fn ->
+                     expect(String, :split, fn x, y -> x + y end)
+                   end
     end
 
     test "expecting when mock is not defined" do
@@ -475,9 +477,11 @@ defmodule Mimic.Test do
     end
 
     test "raises if a non copied module is given" do
-      assert_raise ArgumentError, "Module String not mocked", fn ->
-        expect(String, :split, fn x, y -> x + y end)
-      end
+      assert_raise ArgumentError,
+                   "Module String has not been copied.  See docs for Mimic.copy/1",
+                   fn ->
+                     expect(String, :split, fn x, y -> x + y end)
+                   end
     end
 
     test "expecting when mock is not defined" do

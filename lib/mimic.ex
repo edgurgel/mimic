@@ -225,7 +225,7 @@ defmodule Mimic do
     arity = fun_info[:arity]
     module = fun_info[:module]
     fn_name = fun_info[:name]
-    raise_if_not_mocked!(module)
+    raise_if_not_copied!(module)
     raise_if_not_exported_function!(module, fn_name, arity)
 
     case Server.expect(module, fn_name, arity, 0, func) do
