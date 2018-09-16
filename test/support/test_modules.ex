@@ -12,5 +12,6 @@ defmodule Counter do
 end
 
 defmodule Enumerator do
+  @moduledoc false
   def to_list(x, y), do: Enum.to_list(x..y)
 end
