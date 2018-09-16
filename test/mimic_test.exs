@@ -506,7 +506,7 @@ defmodule Mimic.Test do
     test "raises if a different process used expect" do
       Task.async(fn ->
         assert_raise ArgumentError,
-                     "Expect cannot be called by the current process. Only the global owner is allowed.",
+                     "Reject cannot be called by the current process. Only the global owner is allowed.",
                      fn ->
                        reject(&Calculator.add/2)
                      end

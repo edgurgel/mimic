@@ -113,14 +113,12 @@ defmodule Mimic do
     raise_if_not_copied!(module)
     raise_if_not_exported_function!(module, function_name, arity)
 
-    case Server.stub(module, function_name, arity, function) do
-      :ok ->
-        module
-
-      {:error, :not_global_owner} ->
-        raise ArgumentError,
-              "Stub cannot be called by the current process. Only the global owner is allowed."
-    end
+    module
+    |> Server.stub(function_name, arity, function)
+    |> validate_server_response(
+      module,
+      "Stub cannot be called by the current process. Only the global owner is allowed."
+    )
   end
 
   @doc """
@@ -135,6 +133,7 @@ defmodule Mimic do
   ## Raises:
 
     * If `module` is not copied.
+    * If `function` is not called by the stubbing process.
 
   ## Example
 
@@ -149,14 +148,12 @@ defmodule Mimic do
   def stub(module) do
     raise_if_not_copied!(module)
 
-    case Server.stub(module) do
-      :ok ->
-        module
-
-      {:error, :not_global_owner} ->
-        raise ArgumentError,
-              "Stub cannot be called by the current process. Only the global owner is allowed."
-    end
+    module
+    |> Server.stub()
+    |> validate_server_response(
+      module,
+      "Stub cannot be called by the current process. Only the global owner is allowed."
+    )
   end
 
   @doc """
@@ -202,40 +199,85 @@ defmodule Mimic do
     raise_if_not_copied!(module)
     raise_if_not_exported_function!(module, fn_name, arity)
 
-    case Server.expect(module, fn_name, arity, num_calls, func) do
-      :ok ->
-        module
-
-      {:error, :not_global_owner} ->
-        raise ArgumentError,
-              "Expect cannot be called by the current process. Only the global owner is allowed."
-    end
+    module
+    |> Server.expect(fn_name, arity, num_calls, func)
+    |> validate_server_response(
+      module,
+      "Expect cannot be called by the current process. Only the global owner is allowed."
+    )
   end
 
   @doc """
-  To expect that `Calculator.add/2` will **not** be called:
+  Define a stub which must not be called.
 
-    reject(&Calculator.add/3)
+  This function allows you do define a stub which must not be called during the
+  course of this test.  If it is called then the verification step will raise.
 
-  If this function is not called the verification step will raise
+  ## Arguments:
+
+    * `function` - A capture of the function which must not be called.
+
+  ## Raises:
+
+    * If `function` is not called by the stubbing process.
+
+  ## Example:
+
+      iex> Mimic.reject(&Calculator.add/2)
+      Calculator
+
   """
   @spec reject(function) :: module
-  def reject(func) when is_function(func) do
-    fun_info = :erlang.fun_info(func)
+  def reject(function) when is_function(function) do
+    fun_info = :erlang.fun_info(function)
     arity = fun_info[:arity]
     module = fun_info[:module]
     fn_name = fun_info[:name]
     raise_if_not_copied!(module)
     raise_if_not_exported_function!(module, fn_name, arity)
 
-    case Server.expect(module, fn_name, arity, 0, func) do
-      :ok ->
-        module
+    module
+    |> Server.expect(fn_name, arity, 0, function)
+    |> validate_server_response(
+      module,
+      "Reject cannot be called by the current process. Only the global owner is allowed."
+    )
+  end
 
-      {:error, :not_global_owner} ->
-        raise ArgumentError,
-              "Expect cannot be called by the current process. Only the global owner is allowed."
-    end
+  @doc """
+  Define a stub which must not be called.
+
+  This function allows you do define a stub which must not be called during the
+  course of this test.  If it is called then the verification step will raise.
+
+  ## Arguments:
+
+    * `module` - the name of the module in which we're adding the stub.
+    * `function_name` - the name of the function we're stubbing.
+    * `arity` - the arity of the function we're stubbing.
+
+  ## Raises:
+
+    * If `function` is not called by the stubbing process.
+
+  ## Example:
+
+      iex> Mimic.reject(Calculator, :add, 2)
+      Calculator
+
+  """
+  @spec reject(module, atom, non_neg_integer) :: module
+  def reject(module, function_name, arity) do
+    raise_if_not_copied!(module)
+    raise_if_not_exported_function!(module, function_name, arity)
+    func = Function.capture(module, function_name, arity)
+
+    module
+    |> Server.expect(function_name, arity, 0, func)
+    |> validate_server_response(
+      module,
+      "Reject cannot be called by the current process. Only the global owner is allowed."
+    )
   end
 
   @doc """
@@ -275,13 +317,9 @@ defmodule Mimic do
   """
   @spec allow(module(), pid(), pid()) :: module() | {:error, atom()}
   def allow(module, owner_pid, allowed_pid) do
-    case Server.allow(module, owner_pid, allowed_pid) do
-      :ok ->
-        module
-
-      {:error, :global_mode} ->
-        raise ArgumentError, "Allow must not be called when mode is global."
-    end
+    module
+    |> Server.allow(owner_pid, allowed_pid)
+    |> validate_server_response(module, "Allow must not be called when mode is global.")
   end
 
   @doc """
@@ -394,4 +432,9 @@ defmodule Mimic do
       raise ArgumentError, "Function #{fn_name}/#{arity} not defined for #{inspect(module)}"
     end
   end
+
+  defp validate_server_response(:ok, module, _), do: module
+
+  defp validate_server_response({:error, _}, _, error_message),
+    do: raise(ArgumentError, error_message)
 end
