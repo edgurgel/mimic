@@ -177,3 +177,7 @@ mimic         105.47 K - 1.25x slower
 ```
 
 There's a small fixed price to pay when mimic is used but it is unnoticeable for tests purposes.
+
+## Acknowledgements
+
+Thanks to [@jamesotron](https://github.com/jamesotron) and [@alissonsales](http://github.com/alissonsales) for all the help! :tada:
