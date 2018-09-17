@@ -480,7 +480,7 @@ defmodule Mimic.Test do
       assert_raise ArgumentError,
                    "Module String has not been copied.  See docs for Mimic.copy/1",
                    fn ->
-                     expect(String, :split, fn x, y -> x + y end)
+                     reject(String, :split, fn x, y -> x + y end)
                    end
     end
 
@@ -506,7 +506,7 @@ defmodule Mimic.Test do
     test "raises if a different process used expect" do
       Task.async(fn ->
         assert_raise ArgumentError,
-                     "Expect cannot be called by the current process. Only the global owner is allowed.",
+                     "Reject cannot be called by the current process. Only the global owner is allowed.",
                      fn ->
                        reject(&Calculator.add/2)
                      end
@@ -516,6 +516,74 @@ defmodule Mimic.Test do
 
     test "expecting when mock is not defined" do
       assert_raise ArgumentError, fn -> reject(&Date.add/2) end
+    end
+  end
+
+  describe "reject3/ private mode" do
+    setup :set_mimic_private
+
+    test "expect no call to function" do
+      reject(Calculator, :add, 2)
+      reject(Calculator, :mult, 2)
+
+      message =
+        ~r"expected Calculator.add/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
+
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.add(3, 7) end
+
+      message =
+        ~r"expected Calculator.mult/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
+
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(3, 7) end
+    end
+
+    test "expectation being fulfilled" do
+      reject(Calculator, :add, 2)
+      reject(Calculator, :mult, 2)
+
+      verify!(self())
+    end
+
+    test "raises if a non copied module is given" do
+      assert_raise ArgumentError,
+                   "Module String has not been copied.  See docs for Mimic.copy/1",
+                   fn ->
+                     reject(String, :split, fn x, y -> x + y end)
+                   end
+    end
+
+    test "expecting when mock is not defined" do
+      assert_raise ArgumentError, fn -> reject(Date, :add, 2) end
+    end
+  end
+
+  describe "reject/3 global mode" do
+    setup :set_mimic_global
+
+    test "basic expectation" do
+      reject(Calculator, :add, 2)
+      reject(Calculator, :mult, 2)
+
+      Task.async(fn ->
+        assert_raise Mimic.UnexpectedCallError, fn -> Calculator.add(4, :_) end
+        assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(4, :_) end
+      end)
+      |> Task.await()
+    end
+
+    test "raises if a different process used expect" do
+      Task.async(fn ->
+        assert_raise ArgumentError,
+                     "Reject cannot be called by the current process. Only the global owner is allowed.",
+                     fn ->
+                       reject(Calculator, :add, 2)
+                     end
+      end)
+      |> Task.await()
+    end
+
+    test "expecting when mock is not defined" do
+      assert_raise ArgumentError, fn -> reject(Date, :add, 2) end
     end
   end
 

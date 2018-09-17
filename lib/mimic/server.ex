@@ -184,7 +184,7 @@ defmodule Mimic.Server do
 
       :ets.insert_new(__MODULE__, {{owner, module}})
 
-      {:reply, :ok,
+      {:reply, {:ok, module},
        %{
          state
          | stubs: put_in(state.stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func)
@@ -212,7 +212,7 @@ defmodule Mimic.Server do
           put_in(stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func)
         end)
 
-      {:reply, :ok, %{state | stubs: stubs}}
+      {:reply, {:ok, module}, %{state | stubs: stubs}}
     else
       {:reply, {:error, :not_global_owner}, state}
     end
@@ -233,7 +233,7 @@ defmodule Mimic.Server do
           &((&1 || []) ++ [expectation])
         )
 
-      {:reply, :ok, %{state | expectations: expectations}}
+      {:reply, {:ok, module}, %{state | expectations: expectations}}
     else
       {:reply, {:error, :not_global_owner}, state}
     end
@@ -258,7 +258,7 @@ defmodule Mimic.Server do
         :ets.insert(__MODULE__, {{allowed_pid, module}, actual_owner_pid})
     end
 
-    {:reply, :ok, state}
+    {:reply, {:ok, module}, state}
   end
 
   def handle_call(
