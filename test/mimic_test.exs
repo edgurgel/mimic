@@ -480,7 +480,7 @@ defmodule Mimic.Test do
       assert_raise ArgumentError,
                    "Module String has not been copied.  See docs for Mimic.copy/1",
                    fn ->
-                     expect(String, :split, fn x, y -> x + y end)
+                     reject(String, :split, fn x, y -> x + y end)
                    end
     end
 
@@ -548,7 +548,7 @@ defmodule Mimic.Test do
       assert_raise ArgumentError,
                    "Module String has not been copied.  See docs for Mimic.copy/1",
                    fn ->
-                     expect(String, :split, fn x, y -> x + y end)
+                     reject(String, :split, fn x, y -> x + y end)
                    end
     end
 
