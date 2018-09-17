@@ -266,7 +266,7 @@ defmodule Mimic do
   def reject(module, function_name, arity) do
     raise_if_not_copied!(module)
     raise_if_not_exported_function!(module, function_name, arity)
-    func = Function.capture(module, function_name, arity)
+    func = :erlang.make_fun(module, function_name, arity)
 
     module
     |> Server.expect(function_name, arity, 0, func)
