@@ -116,7 +116,6 @@ defmodule Mimic do
     module
     |> Server.stub(function_name, arity, function)
     |> validate_server_response(
-      module,
       "Stub cannot be called by the current process. Only the global owner is allowed."
     )
   end
@@ -151,7 +150,6 @@ defmodule Mimic do
     module
     |> Server.stub()
     |> validate_server_response(
-      module,
       "Stub cannot be called by the current process. Only the global owner is allowed."
     )
   end
@@ -202,7 +200,6 @@ defmodule Mimic do
     module
     |> Server.expect(fn_name, arity, num_calls, func)
     |> validate_server_response(
-      module,
       "Expect cannot be called by the current process. Only the global owner is allowed."
     )
   end
@@ -239,7 +236,6 @@ defmodule Mimic do
     module
     |> Server.expect(fn_name, arity, 0, function)
     |> validate_server_response(
-      module,
       "Reject cannot be called by the current process. Only the global owner is allowed."
     )
   end
@@ -275,7 +271,6 @@ defmodule Mimic do
     module
     |> Server.expect(function_name, arity, 0, func)
     |> validate_server_response(
-      module,
       "Reject cannot be called by the current process. Only the global owner is allowed."
     )
   end
@@ -319,7 +314,7 @@ defmodule Mimic do
   def allow(module, owner_pid, allowed_pid) do
     module
     |> Server.allow(owner_pid, allowed_pid)
-    |> validate_server_response(module, "Allow must not be called when mode is global.")
+    |> validate_server_response("Allow must not be called when mode is global.")
   end
 
   @doc """
@@ -433,8 +428,8 @@ defmodule Mimic do
     end
   end
 
-  defp validate_server_response(:ok, module, _), do: module
+  defp validate_server_response({:ok, module}, _), do: module
 
-  defp validate_server_response({:error, _}, _, error_message),
+  defp validate_server_response({:error, _}, error_message),
     do: raise(ArgumentError, error_message)
 end
