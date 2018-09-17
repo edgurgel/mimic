@@ -58,7 +58,7 @@ defmodule Mimic do
   When set in global mode any process is able to call the stubs and expectations
   defined in your tests.
 
-  **Warning: Using global mode disables `async: true` in your tests**
+  **Warning: If using global mode you should remove `async: true` from your tests**
 
   Enable global mode using `set_mimic_global/1`.
 
@@ -76,9 +76,6 @@ defmodule Mimic do
     |> Task.await
   end
   ```
-
-  The global mode must always be explicitly set per test. By default mocks run
-  in private mode.
   """
   alias ExUnit.Callbacks
   alias Mimic.{Server, VerificationError}
@@ -99,12 +96,12 @@ defmodule Mimic do
 
   ## Example
 
-        iex> Calculator.add(2, 4)
-        6
+      iex> Calculator.add(2, 4)
+      6
 
-        iex> Mimic.stub(Calculator, :add, fn x, y -> x * y end)
-        ...> Calculator.add(2, 4)
-        8
+      iex> Mimic.stub(Calculator, :add, fn x, y -> x * y end)
+      ...> Calculator.add(2, 4)
+      8
 
   """
   @spec stub(module(), atom(), function()) :: module
@@ -139,8 +136,6 @@ defmodule Mimic do
       iex> Mimic.stub(Calculator)
       ...> Calculator.add(2, 4)
       ** (ArgumentError) Module Calculator has not been copied.  See docs for Mimic.copy/1
-          (mimic) lib/mimic.ex:129: Mimic.raise_if_not_copied!/1
-          (mimic) lib/mimic.ex:92: Mimic.stub/1
 
   """
   @spec stub(module()) :: module()
@@ -176,12 +171,12 @@ defmodule Mimic do
 
   ## Example
 
-        iex> Calculator.add(2, 4)
-        6
+      iex> Calculator.add(2, 4)
+      6
 
-        iex> Mimic.expect(Calculator, :add, fn x, y -> x * y end)
-        ...> Calculator.add(2, 4)
-        8
+      iex> Mimic.expect(Calculator, :add, fn x, y -> x * y end)
+      ...> Calculator.add(2, 4)
+      8
   """
   @spec expect(atom, atom, non_neg_integer, function) :: module
   def expect(module, fn_name, num_calls \\ 1, func)
@@ -216,7 +211,7 @@ defmodule Mimic do
 
   ## Raises:
 
-    * If `function` is not called by the stubbing process.
+    * If `function` is not called by the stubbing process while calling `verify!/1`.
 
   ## Example:
 
@@ -254,7 +249,7 @@ defmodule Mimic do
 
   ## Raises:
 
-    * If `function` is not called by the stubbing process.
+    * If `function` is not called by the stubbing process while calling `verify!/1`.
 
   ## Example:
 
