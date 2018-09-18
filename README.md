@@ -53,7 +53,6 @@ test "invokes add once and mult twice" do
 
   assert Calculator.add(2, 3) == 5
   assert Calculator.mult(2, 3) == 6
-  assert Calculator.mult(4, 6) == 24
 
   assert Calculator.add(2, 3) == :stub
 end
@@ -119,7 +118,7 @@ Calling `allow/2` will permit a different pid to call the stubs and expects from
 
 Global mode can be used with `set_mimic_global` like this:
 
-```
+```elixir
 setup :set_mimic_global
 
 test "invokes add and mult" do
