@@ -1,4 +1,4 @@
-# Mimic [![Build Status](https://travis-ci.org/edgurgel/mimic.svg?branch=master)](https://travis-ci.org/edgurgel/mimic) [![Hex pm](http://img.shields.io/hexpm/v/mimic.svg?style=flat)](https://hex.pm/packages/mimic)
+# Mimic [![Build Status](https://travis-ci.org/edgurgel/mimic.svg?branch=master)](https://travis-ci.org/edgurgel/mimic) [![Hex pm](http://img.shields.io/hexpm/v/mimic.svg?style=flat)](https://hex.pm/packages/mimic) [![Hexdocs](https://img.shields.io/badge/Hexdocs-v0.2.0-green.svg)](https://hexdocs.pm/mimic/readme.html)
 
 
 A sane way of using mocks in Elixir. It borrows a lot from both Meck & Mox! Thanks @eproxus & @josevalim
@@ -44,7 +44,6 @@ import Mimic
 
 # Make sure mocks are verified when the test exits
 setup :verify_on_exit!
-
 test "invokes add once and mult twice" do
   Calculator
   |> stub(:add, fn x, y -> :stub end)
@@ -94,7 +93,7 @@ assert Calculator.add(1, 1) == :stub
 
 ```elixir
 Calculator
-|> expect(:add, fn x, y -> {:add, x, y} end)
+|> expect(:add, 2, fn x, y -> {:add, x, y} end)
 
 assert Calculator.add(1, 3) == {:add, 1, 3}
 assert Calculator.add(4, 5) == {:add, 4, 5}
