@@ -112,8 +112,8 @@ defmodule Mimic.Server do
 
   def init([]) do
     :ets.new(__MODULE__, [:named_table, :protected, :set])
-    :ets.insert_new(__MODULE__, {:mode, :private})
-    {:ok, %State{mode: :private}}
+    state = do_set_private_mode(%State{})
+    {:ok, state}
   end
 
   def handle_cast({:exit, pid}, state) do
@@ -136,6 +136,14 @@ defmodule Mimic.Server do
     select = [{{{pid, :_}}, [], [true]}, {{{:_, :_}, pid}, [], [true]}]
 
     :ets.select_delete(__MODULE__, select)
+
+    state =
+      if pid == state.global_pid do
+        do_set_private_mode(state)
+      else
+        state
+      end
+
     %{state | expectations: expectations, stubs: stubs}
   end
 
@@ -240,13 +248,11 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:set_global_mode, owner_pid}, _from, state) do
-    :ets.insert(__MODULE__, {:mode, :global, owner_pid})
-    {:reply, :ok, %{state | global_pid: owner_pid, mode: :global}}
+    {:reply, :ok, do_set_global_mode(owner_pid, state)}
   end
 
   def handle_call(:set_private_mode, _from, state) do
-    :ets.insert(__MODULE__, {:mode, :private})
-    {:reply, :ok, %{state | global_pid: nil, mode: :private}}
+    {:reply, :ok, do_set_private_mode(state)}
   end
 
   def handle_call({:allow, module, owner_pid, allowed_pid}, _from, state = %State{mode: :private}) do
@@ -266,7 +272,7 @@ defmodule Mimic.Server do
         _from,
         state = %State{mode: :global}
       ) do
-    {:reply, {:error, :global_mode}, state}
+    {:reply, {:error, :global}, state}
   end
 
   def handle_call({:verify, pid}, _from, state) do
@@ -332,5 +338,15 @@ defmodule Mimic.Server do
 
     {fun, _} = Code.eval_quoted({:fn, [], clause})
     fun
+  end
+
+  defp do_set_global_mode(owner_pid, state) do
+    :ets.insert(__MODULE__, {:mode, :global, owner_pid})
+    %{state | global_pid: owner_pid, mode: :global}
+  end
+
+  defp do_set_private_mode(state) do
+    :ets.insert(__MODULE__, {:mode, :private})
+    %{state | global_pid: nil, mode: :private}
   end
 end

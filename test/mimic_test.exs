@@ -20,6 +20,24 @@ defmodule Mimic.Test do
     end
   end
 
+  describe "default mode" do
+    test "private mode is the default mode" do
+      Task.async(fn ->
+        Mimic.set_mimic_global()
+        stub(Calculator, :add, fn _, _ -> :stub end)
+
+        Task.async(fn ->
+          assert Calculator.add(3, 7) == :stub
+        end)
+        |> Task.await()
+      end)
+      |> Task.await()
+
+      stub(Calculator, :add, fn _, _ -> :private_stub end)
+      assert Calculator.add(3, 7) == :private_stub
+    end
+  end
+
   describe "stub/1 private mode" do
     setup :set_mimic_private
 
