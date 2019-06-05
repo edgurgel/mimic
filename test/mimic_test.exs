@@ -33,6 +33,7 @@ defmodule Mimic.Test do
       end)
       |> Task.await()
 
+      :timer.sleep(500)
       stub(Calculator, :add, fn _, _ -> :private_stub end)
       assert Calculator.add(3, 7) == :private_stub
     end
