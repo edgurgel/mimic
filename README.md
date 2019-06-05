@@ -10,7 +10,7 @@ Just add mimic to your list of dependencies in mix.exs:
 ```elixir
 def deps do
   [
-    {:mimic, "~> 0.2", only: :test}
+    {:mimic, "~> 0.3", only: :test}
   ]
 end
 ```
