@@ -80,6 +80,14 @@ defmodule Mimic do
   alias ExUnit.Callbacks
   alias Mimic.{Server, VerificationError}
 
+  @doc false
+  defmacro __using__(_opts \\ []) do
+    quote do
+      import Mimic
+      setup :verify_on_exit!
+    end
+  end
+
   @doc """
   Define a stub function for a copied module.
 
