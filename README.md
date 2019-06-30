@@ -5,12 +5,12 @@ A sane way of using mocks in Elixir. It borrows a lot from both Meck & Mox! Than
 
 ## Installation
 
-Just add mimic to your list of dependencies in mix.exs:
+Just add `mimic` to your list of dependencies in mix.exs:
 
 ```elixir
 def deps do
   [
-    {:mimic, "~> 0.3", only: :test}
+    {:mimic, "~> 1.0", only: :test}
   ]
 end
 ```
@@ -39,11 +39,8 @@ Then for the actual tests one could use it like this:
 
 ```elixir
 use ExUnit.Case, async: true
+use Mimic
 
-import Mimic
-
-# Make sure mocks are verified when the test exits
-setup :verify_on_exit!
 test "invokes add once and mult twice" do
   Calculator
   |> stub(:add, fn x, y -> :stub end)
