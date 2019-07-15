@@ -4,8 +4,8 @@ defmodule Mimic.Mixfile do
   def project do
     [
       app: :mimic,
-      version: "1.0.0",
-      elixir: "~> 1.7",
+      version: "1.1.0",
+      elixir: "~> 1.8",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
