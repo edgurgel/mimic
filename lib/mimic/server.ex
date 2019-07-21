@@ -1,5 +1,6 @@
 defmodule Mimic.Server do
   use GenServer
+  alias Mimic.Cover
   @moduledoc false
 
   defmodule State do
@@ -8,7 +9,8 @@ defmodule Mimic.Server do
               mode: :private,
               global_pid: nil,
               stubs: %{},
-              expectations: %{}
+              expectations: %{},
+              modules_beam: %{}
   end
 
   defmodule Expectation do
@@ -50,6 +52,14 @@ defmodule Mimic.Server do
 
   def exit(pid) do
     GenServer.cast(__MODULE__, {:exit, pid})
+  end
+
+  def store_beam_and_coverdata(module, beam, coverdata) do
+    GenServer.call(__MODULE__, {:store_beam_and_coverdata, module, beam, coverdata})
+  end
+
+  def reset(module) do
+    GenServer.call(__MODULE__, {:reset, module})
   end
 
   def apply(module, fn_name, args) do
@@ -291,6 +301,20 @@ defmodule Mimic.Server do
 
   def handle_call({:verify_on_exit, pid}, _from, state) do
     {:reply, :ok, %{state | verify_on_exit: MapSet.put(state.verify_on_exit, pid)}}
+  end
+
+  def handle_call({:store_beam_and_coverdata, module, beam, coverdata}, _from, state) do
+    modules_beam = Map.put(state.modules_beam, module, {beam, coverdata})
+    {:reply, :ok, %{state | modules_beam: modules_beam}}
+  end
+
+  def handle_call({:reset, module}, _from, state) do
+    case state.modules_beam[module] do
+      {beam, coverdata} -> Cover.replace_coverdata!(module, beam, coverdata)
+      _ -> Mimic.Module.clear!(module)
+    end
+
+    {:reply, :ok, state}
   end
 
   defp apply_call_to_expectations(

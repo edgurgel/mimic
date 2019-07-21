@@ -13,6 +13,7 @@ defmodule Mimic.Mixfile do
       description: "Mocks for Elixir functions",
       deps: deps(),
       package: package(),
+      test_coverage: [tool: Mimic.TestCover],
       docs: [extras: ["README.md"], main: "readme"]
     ]
   end

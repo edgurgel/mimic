@@ -1,5 +1,5 @@
 defmodule Mimic.Module do
-  alias Mimic.Server
+  alias Mimic.{Cover, Server}
   @moduledoc false
 
   def original(module), do: "#{module}.Mimic.Original.Module" |> String.to_atom()
@@ -7,11 +7,23 @@ defmodule Mimic.Module do
   def clear!(module) do
     :code.purge(module)
     :code.delete(module)
-    {:module, ^module} = :code.ensure_loaded(module)
+    :code.purge(original(module))
+    :code.delete(original(module))
     :ok
   end
 
-  def replace!(module, backup_module) do
+  def replace!(module) do
+    backup_module = original(module)
+
+    case :cover.is_compiled(module) do
+      {:file, beam_file} ->
+        coverdata_path = Cover.export_coverdata!(module)
+        Server.store_beam_and_coverdata(module, beam_file, coverdata_path)
+
+      false ->
+        :ok
+    end
+
     rename_module(module, backup_module)
     Code.compiler_options(ignore_module_conflict: true)
     create_mock(module)
@@ -21,23 +33,14 @@ defmodule Mimic.Module do
   end
 
   defp rename_module(module, new_module) do
-    beam_file =
-      case :code.get_object_code(module) do
-        {_, binary, _filename} -> binary
-        _error -> throw({:object_code_not_found, module})
-      end
+    beam_code = beam_code(module)
 
-    result =
-      case :beam_lib.chunks(beam_file, [:abstract_code]) do
-        {:ok, {_, [{:abstract_code, {:raw_abstract_v1, forms}}]}} -> forms
-        {:ok, {_, [{:abstract_code, :no_abstract_code}]}} -> throw(:no_abstract_code)
-      end
+    {:ok, {_, [{:abstract_code, {:raw_abstract_v1, forms}}]}} =
+      :beam_lib.chunks(beam_code, [:abstract_code])
 
-    result =
-      result
-      |> rename_attribute(new_module)
+    forms = rename_attribute(forms, new_module)
 
-    case :compile.forms(result, [:return_errors]) do
+    case :compile.forms(forms, compiler_options(module)) do
       {:ok, module_name, binary} ->
         load_binary(module_name, binary)
         binary
@@ -45,18 +48,32 @@ defmodule Mimic.Module do
       {:ok, module_name, binary, _warnings} ->
         load_binary(module_name, binary)
         Binary
-
-      error ->
-        exit({:compile_forms, error})
     end
+  end
+
+  defp beam_code(module) do
+    case :code.get_object_code(module) do
+      {_, binary, _filename} -> binary
+      _error -> throw({:object_code_not_found, module})
+    end
+  end
+
+  defp compiler_options(module) do
+    options =
+      module.module_info(:compile)
+      |> Keyword.get(:options)
+      |> Enum.filter(&(&1 != :from_core))
+
+    [:return_errors | [:debug_info | options]]
   end
 
   defp load_binary(module, binary) do
     case :code.load_binary(module, '', binary) do
       {:module, ^module} -> :ok
       {:error, reason} -> exit({:error_loading_module, module, reason})
-      _ -> :yolo
     end
+
+    apply(:cover, :compile_beams, [[{module, binary}]])
   end
 
   defp rename_attribute([{:attribute, line, :module, {_, vars}} | t], new_name) do
