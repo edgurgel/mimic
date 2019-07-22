@@ -335,8 +335,8 @@ defmodule Mimic do
             "Module #{inspect(module)} is not available"
     end
 
-    original_module = Mimic.Module.original(module)
-    Mimic.Module.replace!(module, original_module)
+    Mimic.Module.replace!(module)
+    ExUnit.after_suite(fn _ -> Server.reset(module) end)
 
     :ok
   end
