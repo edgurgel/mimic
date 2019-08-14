@@ -20,7 +20,7 @@ defmodule Mimic.Mixfile do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :tools],
       mod: {Mimic.Application, []}
     ]
   end
