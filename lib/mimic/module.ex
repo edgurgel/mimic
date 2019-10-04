@@ -88,8 +88,10 @@ defmodule Mimic.Module do
 
   defp create_mock(module) do
     mimic_info = module_mimic_info()
+    mimic_behaviours = generate_mimic_behaviours(module)
     mimic_functions = generate_mimic_functions(module)
-    Module.create(module, [mimic_info | mimic_functions], Macro.Env.location(__ENV__))
+    quoted = [mimic_info | [mimic_behaviours ++ mimic_functions]]
+    Module.create(module, quoted, Macro.Env.location(__ENV__))
     module
   end
 
@@ -114,5 +116,16 @@ defmodule Mimic.Module do
         end
       end
     end
+  end
+
+  defp generate_mimic_behaviours(module) do
+    module.module_info(:attributes)
+    |> Keyword.get_values(:behaviour)
+    |> List.flatten()
+    |> Enum.map(fn behaviour ->
+      quote do
+        @behaviour unquote(behaviour)
+      end
+    end)
   end
 end
