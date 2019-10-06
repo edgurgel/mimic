@@ -727,4 +727,16 @@ defmodule Mimic.Test do
       |> Task.await()
     end
   end
+
+  describe "behaviours" do
+    test "copies behaviour attributes" do
+      behaviours =
+        Calculator.module_info(:attributes)
+        |> Keyword.get_values(:behaviour)
+        |> List.flatten()
+
+      assert AddAdapter in behaviours
+      assert MultAdapter in behaviours
+    end
+  end
 end

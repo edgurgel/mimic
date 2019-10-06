@@ -1,5 +1,17 @@
+defmodule AddAdapter do
+  @moduledoc false
+  @callback add(number(), number()) :: number()
+end
+
+defmodule MultAdapter do
+  @moduledoc false
+  @callback mult(number(), number()) :: number()
+end
+
 defmodule Calculator do
   @moduledoc false
+  @behaviour AddAdapter
+  @behaviour MultAdapter
   def add(x, y), do: x + y
   def mult(x, y), do: x * y
 end
