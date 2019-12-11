@@ -314,7 +314,9 @@ defmodule Mimic.Server do
       _ -> Mimic.Module.clear!(module)
     end
 
-    {:reply, :ok, state}
+    modules_beam = Map.delete(state.modules_beam, module)
+
+    {:reply, :ok, %{state | modules_beam: modules_beam}}
   end
 
   defp apply_call_to_expectations(
