@@ -50,6 +50,10 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, :set_private_mode)
   end
 
+  def get_mode do
+    GenServer.call(__MODULE__, :get_mode)
+  end
+
   def exit(pid) do
     GenServer.cast(__MODULE__, {:exit, pid})
   end
@@ -263,6 +267,10 @@ defmodule Mimic.Server do
 
   def handle_call(:set_private_mode, _from, state) do
     {:reply, :ok, do_set_private_mode(state)}
+  end
+
+  def handle_call(:get_mode, _from, state) do
+    {:reply, {:ok, state.mode}, state}
   end
 
   def handle_call({:allow, module, owner_pid, allowed_pid}, _from, state = %State{mode: :private}) do
