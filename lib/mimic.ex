@@ -419,7 +419,7 @@ defmodule Mimic do
   end
 
   @doc "Returns the current mode (`:global` or `:private`)"
-  @spec mode() :: atom()
+  @spec mode() :: :private | :global
   def mode do
     Server.get_mode()
     |> validate_server_response("Couldn't get the current mode.")
