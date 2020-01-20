@@ -728,6 +728,22 @@ defmodule Mimic.Test do
     end
   end
 
+  describe "mode/0 global mode" do
+    setup :set_mimic_global
+
+    test "returns :global" do
+      assert Mimic.mode() == :global
+    end
+  end
+
+  describe "mode/0 private mode" do
+    setup :set_mimic_private
+
+    test "returns :private" do
+      assert Mimic.mode() == :private
+    end
+  end
+
   describe "behaviours" do
     test "copies behaviour attributes" do
       behaviours =

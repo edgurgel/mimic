@@ -418,6 +418,13 @@ defmodule Mimic do
     :ok
   end
 
+  @doc "Returns the current mode (`:global` or `:private`)"
+  @spec mode() :: :private | :global
+  def mode do
+    Server.get_mode()
+    |> validate_server_response("Couldn't get the current mode.")
+  end
+
   defp raise_if_not_copied!(module) do
     unless function_exported?(module, :__mimic_info__, 0) do
       raise ArgumentError,
