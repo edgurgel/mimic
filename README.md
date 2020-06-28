@@ -112,6 +112,8 @@ and explicitly allowed process will see the different behaviour.
 
 Calling `allow/2` will permit a different pid to call the stubs and expects from the original process.
 
+If you are using `Task` there is no need to use global mode as Tasks can see the same expectations and stubs from the calling process.
+
 Global mode can be used with `set_mimic_global` like this:
 
 ```elixir
@@ -122,11 +124,16 @@ test "invokes add and mult" do
   |> expect(:add, fn x, y -> x + y end)
   |> expect(:mult, fn x, y -> x * y end)
 
-  Task.async(fn ->
+  parent_pid = self()
+
+  spawn_link(fn ->
     assert Calculator.add(2, 3) == 5
     assert Calculator.mult(2, 3) == 6
+
+    send parent_pid, :ok
   end)
-  |> Task.await
+
+  assert_receive :ok
 end
 ```
 
