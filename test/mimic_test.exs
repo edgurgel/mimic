@@ -22,16 +22,25 @@ defmodule Mimic.Test do
 
   describe "default mode" do
     test "private mode is the default mode" do
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         Mimic.set_mimic_global()
         stub(Calculator, :add, fn _, _ -> :stub end)
 
-        Task.async(fn ->
+        child_pid = self()
+
+        spawn_link(fn ->
           assert Calculator.add(3, 7) == :stub
+
+          send(child_pid, :ok_child)
         end)
-        |> Task.await()
+
+        assert_receive :ok_child
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
 
       :timer.sleep(500)
       stub(Calculator, :add, fn _, _ -> :private_stub end)
@@ -47,11 +56,15 @@ defmodule Mimic.Test do
       assert_raise Mimic.UnexpectedCallError, fn -> Calculator.add(3, 7) end
       assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(4, 9) end
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert Calculator.add(3, 7) == 10
         assert Calculator.mult(4, 9) == 36
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "stubbing when mock is not defined" do
@@ -67,22 +80,31 @@ defmodule Mimic.Test do
       assert_raise Mimic.UnexpectedCallError, fn -> Calculator.add(2, 2) end
       assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(2, 2) end
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert_raise Mimic.UnexpectedCallError, fn -> Calculator.add(2, 2) end
         assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(2, 2) end
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "raises if a different process used stub" do
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert_raise ArgumentError,
                      "Stub cannot be called by the current process. Only the global owner is allowed.",
                      fn ->
                        stub(Calculator)
                      end
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "stubbing when mock is not defined" do
@@ -116,15 +138,19 @@ defmodule Mimic.Test do
       assert Calculator.add(2, :undefined) == 4
       assert Calculator.mult(2, 3) == 4
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         Calculator
         |> stub(:add, fn x, _y -> x + 3 end)
         |> stub(:mult, fn x, _y -> x * 7 end)
 
         assert Calculator.add(2, :undefined) == 5
         assert Calculator.mult(2, 3) == 14
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "does not fail verification if not called" do
@@ -198,13 +224,18 @@ defmodule Mimic.Test do
       |> stub(:inc, fn x -> x + 7 end)
       |> stub(:add, fn counter, x -> counter + x + 7 end)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert Calculator.add(2, :undefined) == 4
         assert Calculator.mult(2, 3) == 4
         assert Counter.inc(3) == 10
         assert Counter.add(3, 10) == 20
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "respects calls precedence" do
@@ -212,22 +243,30 @@ defmodule Mimic.Test do
       |> stub(:add, fn x, y -> x + y end)
       |> expect(:add, fn _, _ -> :expected end)
 
-      Task.async(fn ->
-        assert Calculator.add(1, 1) == :expected
-      end)
-      |> Task.await()
+      parent_pid = self()
 
+      spawn_link(fn ->
+        assert Calculator.add(1, 1) == :expected
+
+        send(parent_pid, :ok)
+      end)
+
+      assert_receive :ok
       verify!()
     end
 
     test "allows multiple invocations" do
       stub(Calculator, :add, fn x, y -> x + y end)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert Calculator.add(1, 2) == 3
         assert Calculator.add(3, 4) == 7
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "invokes stub after expectations are fulfilled" do
@@ -236,13 +275,17 @@ defmodule Mimic.Test do
       |> expect(:add, fn _, _ -> :expected end)
       |> expect(:add, fn _, _ -> :expected end)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert Calculator.add(1, 1) == :expected
         assert Calculator.add(1, 1) == :expected
         assert Calculator.add(1, 1) == :stub
-      end)
-      |> Task.await()
 
+        send(parent_pid, :ok)
+      end)
+
+      assert_receive :ok
       verify!()
     end
 
@@ -251,21 +294,31 @@ defmodule Mimic.Test do
       |> stub(:add, fn x, _y -> x + 2 end)
       |> stub(:add, fn x, _y -> x + 3 end)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert Calculator.add(2, :undefined) == 5
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "raises if a different process used stub" do
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert_raise ArgumentError,
                      "Stub cannot be called by the current process. Only the global owner is allowed.",
                      fn ->
                        stub(Calculator, :add, fn x, y -> x + y end)
                      end
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "raises if a non copied module is given" do
@@ -377,11 +430,16 @@ defmodule Mimic.Test do
       |> expect(:add, fn x, _y -> x + 2 end)
       |> expect(:mult, fn x, _y -> x * 2 end)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert Calculator.add(4, :_) == 6
         assert Calculator.mult(5, :_) == 10
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "stacking expectations" do
@@ -389,22 +447,32 @@ defmodule Mimic.Test do
       |> expect(:add, fn _x, _y -> :first end)
       |> expect(:add, fn _x, _y -> :second end)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert Calculator.add(4, :_) == :first
         assert Calculator.add(5, :_) == :second
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "expect multiple calls" do
       Calculator
       |> expect(:add, 2, fn x, y -> {:add, x, y} end)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert Calculator.add(4, 3) == {:add, 4, 3}
         assert Calculator.add(5, 2) == {:add, 5, 2}
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "expectation not being fulfilled" do
@@ -422,13 +490,17 @@ defmodule Mimic.Test do
 
       assert_raise Mimic.VerificationError, message, fn -> verify!(self()) end
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         Calculator.add(1, 2)
         Calculator.add(2, 3)
         Calculator.mult(4, 5)
-      end)
-      |> Task.await()
 
+        send(parent_pid, :ok)
+      end)
+
+      assert_receive :ok
       verify!(self())
     end
 
@@ -437,13 +509,18 @@ defmodule Mimic.Test do
       |> expect(:add, fn x, _y -> {:mock, x + 2} end)
       |> expect(:mult, fn x, _y -> {:mock, x * 2} end)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert Calculator.add(4, :_) == {:mock, 6}
         assert Calculator.mult(5, :_) == {:mock, 10}
 
         assert Calculator.mult(5, 3) == 15
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "raises if a different process used expect" do
@@ -515,11 +592,16 @@ defmodule Mimic.Test do
       reject(&Calculator.add/2)
       reject(&Calculator.mult/2)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert_raise Mimic.UnexpectedCallError, fn -> Calculator.add(4, :_) end
         assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(4, :_) end
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "raises if a different process used expect" do
@@ -583,11 +665,16 @@ defmodule Mimic.Test do
       reject(Calculator, :add, 2)
       reject(Calculator, :mult, 2)
 
-      Task.async(fn ->
+      parent_pid = self()
+
+      spawn_link(fn ->
         assert_raise Mimic.UnexpectedCallError, fn -> Calculator.add(4, :_) end
         assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(4, :_) end
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "raises if a different process used expect" do
@@ -610,11 +697,52 @@ defmodule Mimic.Test do
     setup :set_mimic_private
     setup :verify_on_exit!
 
+    test "uses $callers property from Task to allow" do
+      Calculator
+      |> expect(:add, 2, fn x, y -> x + y end)
+      |> expect(:mult, fn x, y -> x * y end)
+      |> expect(:add, fn _, _ -> 0 end)
+
+      task =
+        Task.async(fn ->
+          assert Calculator.add(2, 3) == 5
+          assert Calculator.add(3, 2) == 5
+        end)
+
+      Task.await(task)
+
+      assert Calculator.add(:whatever, :whatever) == 0
+      assert Calculator.mult(3, 2) == 6
+    end
+
+    test "nested callers are allowed as well" do
+      Calculator
+      |> expect(:add, 2, fn x, y -> x + y end)
+      |> expect(:mult, fn x, y -> x * y end)
+      |> expect(:add, fn _, _ -> 0 end)
+
+      task =
+        Task.async(fn ->
+          assert Calculator.add(2, 3) == 5
+          assert Calculator.add(3, 2) == 5
+
+          inner_task =
+            Task.async(fn ->
+              assert Calculator.add(:whatever, :whatever) == 0
+              assert Calculator.mult(3, 2) == 6
+            end)
+
+          Task.await(inner_task)
+        end)
+
+      Task.await(task)
+    end
+
     test "allows different processes to share mocks from parent process" do
       parent_pid = self()
 
-      {:ok, child_pid} =
-        Task.start_link(fn ->
+      child_pid =
+        spawn_link(fn ->
           receive do
             :call_mock ->
               add_result = Calculator.add(1, 1)
@@ -642,21 +770,23 @@ defmodule Mimic.Test do
       |> expect(:add, fn _, _ -> :expected end)
       |> stub(:mult, fn _, _ -> :stubbed end)
 
-      Task.async(fn ->
+      spawn_link(fn ->
         Calculator
         |> allow(parent_pid, self())
 
         assert Calculator.add(1, 1) == :expected
         assert Calculator.mult(1, 1) == :stubbed
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
 
     test "allowances are transitive" do
       parent_pid = self()
 
-      {:ok, child_pid} =
-        Task.start_link(fn ->
+      child_pid =
+        spawn_link(fn ->
           receive do
             :call_mock ->
               add_result = Calculator.add(1, 1)
@@ -665,8 +795,8 @@ defmodule Mimic.Test do
           end
         end)
 
-      {:ok, transitive_pid} =
-        Task.start_link(fn ->
+      transitive_pid =
+        spawn_link(fn ->
           receive do
             :allow_mock ->
               Calculator
@@ -696,15 +826,16 @@ defmodule Mimic.Test do
     test "allowances are reclaimed if the owner process dies" do
       parent_pid = self()
 
-      task =
-        Task.async(fn ->
-          Calculator
-          |> expect(:add, fn _, _ -> :expected end)
-          |> stub(:mult, fn _, _ -> :stubbed end)
-          |> allow(self(), parent_pid)
-        end)
+      spawn_link(fn ->
+        Calculator
+        |> expect(:add, fn _, _ -> :expected end)
+        |> stub(:mult, fn _, _ -> :stubbed end)
+        |> allow(self(), parent_pid)
 
-      Task.await(task)
+        send(parent_pid, :ok)
+      end)
+
+      assert_receive :ok
 
       assert Calculator.add(1, 3) == 4
 
@@ -716,15 +847,19 @@ defmodule Mimic.Test do
 
     test "raises if you try to allow process while in global mode" do
       set_mimic_global()
-      {:ok, child_pid} = Task.start_link(fn -> Process.sleep(:infinity) end)
+      parent_pid = self()
+      child_pid = spawn_link(fn -> Process.sleep(:infinity) end)
 
-      Task.async(fn ->
+      spawn_link(fn ->
         assert_raise ArgumentError, "Allow must not be called when mode is global.", fn ->
           Calculator
           |> allow(self(), child_pid)
         end
+
+        send(parent_pid, :ok)
       end)
-      |> Task.await()
+
+      assert_receive :ok
     end
   end
 

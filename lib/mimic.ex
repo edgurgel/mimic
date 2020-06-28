@@ -39,19 +39,24 @@ defmodule Mimic do
   expectations from where they were not defined.
 
   ```elixir
-  test "invokes add from a task" do
+  test "invokes add from a process" do
     Caculator
     |> expect(:add, fn x, y -> x + y end)
 
     parent_pid = self()
 
-    Task.async(fn ->
+    spawn_link(fn ->
       Calculator |> allow(parent_pid, self())
       assert Calculator.add(2, 3) == 5
+
+      send parent_pid, :ok
     end)
-    |> Task.await
+
+    assert_receive :ok
   end
   ```
+
+  If you are using `Task` the expectations and stubs are automatically allowed
 
   ## Global mode
 
