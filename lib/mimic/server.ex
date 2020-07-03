@@ -71,7 +71,9 @@ defmodule Mimic.Server do
     original_module = Mimic.Module.original(module)
 
     if :erlang.function_exported(original_module, fn_name, arity) do
-      case allowed_pid(self(), module) do
+      caller_pids = [self() | Process.get(:"$callers", [])]
+
+      case allowed_pid(caller_pids, module) do
         {:ok, owner_pid} ->
           do_apply(owner_pid, module, fn_name, arity, args)
 
@@ -103,21 +105,28 @@ defmodule Mimic.Server do
   defp apply_original(module, fn_name, args),
     do: Kernel.apply(Mimic.Module.original(module), fn_name, args)
 
-  defp allowed_pid(pid, module) do
+  defp allowed_pid(pids, module) do
     case :ets.lookup(__MODULE__, :mode) do
       [{:mode, :private}] ->
-        case :ets.lookup(__MODULE__, {pid, module}) do
+        match = match_spec(pids, module)
+
+        case :ets.select(__MODULE__, match) do
           [] -> :none
-          [{{^pid, ^module}}] -> {:ok, pid}
-          [{{^pid, ^module}, owner_pid}] -> {:ok, owner_pid}
+          [owner_pid | _] -> {:ok, owner_pid}
         end
 
       [{:mode, :global, global_pid}] ->
         case :ets.lookup(__MODULE__, {global_pid, module}) do
           [] -> :none
-          [{owner_pid}] -> {:ok, owner_pid}
+          [{{^global_pid, ^module}, owner_pid}] -> {:ok, owner_pid}
         end
     end
+  end
+
+  defp match_spec(pids, module) do
+    guards = Enum.map(pids, fn pid -> {:==, :"$1", pid} end)
+    orelse = List.to_tuple([:orelse | guards])
+    [{{{:"$1", module}, :"$2"}, [orelse], [:"$2"]}]
   end
 
   def start_link(_) do
@@ -204,7 +213,7 @@ defmodule Mimic.Server do
     if valid_mode?(state, owner) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
-      :ets.insert_new(__MODULE__, {{owner, module}})
+      :ets.insert_new(__MODULE__, {{owner, module}, owner})
 
       {:reply, {:ok, module},
        %{
@@ -220,7 +229,7 @@ defmodule Mimic.Server do
     if valid_mode?(state, owner) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
-      :ets.insert_new(__MODULE__, {{owner, module}})
+      :ets.insert_new(__MODULE__, {{owner, module}, owner})
 
       original_module = Mimic.Module.original(module)
 
@@ -244,7 +253,7 @@ defmodule Mimic.Server do
     if valid_mode?(state, owner) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
-      :ets.insert_new(__MODULE__, {{owner, module}})
+      :ets.insert_new(__MODULE__, {{owner, module}, owner})
 
       expectation = %Expectation{func: func, num_calls: num_calls}
 
@@ -275,9 +284,6 @@ defmodule Mimic.Server do
 
   def handle_call({:allow, module, owner_pid, allowed_pid}, _from, state = %State{mode: :private}) do
     case :ets.lookup(__MODULE__, {owner_pid, module}) do
-      [{{^owner_pid, ^module}}] ->
-        :ets.insert(__MODULE__, {{allowed_pid, module}, owner_pid})
-
       [{{^owner_pid, ^module}, actual_owner_pid}] ->
         :ets.insert(__MODULE__, {{allowed_pid, module}, actual_owner_pid})
     end
