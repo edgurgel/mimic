@@ -6,6 +6,7 @@ defmodule Mimic.TestExpect do
 
   describe "expect/3" do
     test "should fail due to expected function not called" do
+      # :sys.trace(Mimic.Server, true)
       expect(Calculator, :add, fn _, _ -> 3 end)
     end
   end
