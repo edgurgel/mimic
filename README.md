@@ -96,7 +96,8 @@ assert Calculator.add(1, 3) == {:add, 1, 3}
 assert Calculator.add(4, 5) == {:add, 4, 5}
 ```
 
-`verify!/0` should be called to assert that expected function call actually happen:
+With `use Mimic`, verification `expect/4` function call of is done automatically on test case end. `verify!/1` can be used in case custom verification timing required:
+
 ```elixir
 Calculator
 |> expect(:add, 2, fn x, y -> {:add, x, y} end)
@@ -106,27 +107,6 @@ Calculator
 #   * expected Calculator.add/2 to be invoked 1 time(s) but it has been called 0 time(s)
 verify!()
 ```
-
-alternatively, `verify_on_exit!/1` can be used instead of calling `verify!/0` at every test end
-```elixir
-describe "Calculator.add/2"
-  setup :verify_on_exit!
-
-  test "called at least once" do
-    Calculator
-    |> expect(:add, 2, fn x, y -> {:add, x, y} end)
-
-    # Will raise error because Calculator.add is not called
-    # ** (Mimic.VerificationError) error while verifying mocks for #PID<0.215.0>: 
-    #  * expected Calculator.add/2 to be invoked 1 time(s) but it has been called 0 time(s)
-    # stacktrace:
-    #   (mimic 1.3.0) lib/mimic.ex:419: Mimic.verify!/1
-    #   (mimic 1.3.0) lib/mimic.ex:366: anonymous fn/1 in Mimic.verify_on_exit!/1
-    #   (ex_unit 1.10.4) lib/ex_unit/on_exit_handler.ex:142: ExUnit.OnExitHandler.exec_callback/1
-    #   (ex_unit 1.10.4) lib/ex_unit/on_exit_handler.ex:128: ExUnit.OnExitHandler.on_exit_runner_loop/0
-  end
-end
-``` 
 
 ### Reject
 
