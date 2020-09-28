@@ -108,6 +108,7 @@ Calculator
 verify!()
 ```
 
+
 ### Reject
 
 One may want to reject calls to a specific function. `reject/1` can be used to achieved this behaviour.
