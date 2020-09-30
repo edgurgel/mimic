@@ -96,6 +96,19 @@ assert Calculator.add(1, 3) == {:add, 1, 3}
 assert Calculator.add(4, 5) == {:add, 4, 5}
 ```
 
+With `use Mimic`, verification `expect/4` function call of is done automatically on test case end. `verify!/1` can be used in case custom verification timing required:
+
+```elixir
+Calculator
+|> expect(:add, 2, fn x, y -> {:add, x, y} end)
+
+# Will raise error because Calculator.add is not called
+# ** (Mimic.VerificationError) error while verifying mocks for #PID<0.3182.0>:
+#   * expected Calculator.add/2 to be invoked 1 time(s) but it has been called 0 time(s)
+verify!()
+```
+
+
 ### Reject
 
 One may want to reject calls to a specific function. `reject/1` can be used to achieved this behaviour.

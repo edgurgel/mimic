@@ -144,7 +144,14 @@ defmodule Mimic.Server do
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    {:noreply, clear_data_from_pid(pid, state)}
+    new_state =
+      if MapSet.member?(state.verify_on_exit, pid) do
+        state
+      else
+        clear_data_from_pid(pid, state)
+      end
+
+    {:noreply, new_state}
   end
 
   def handle_info(msg, state) do
