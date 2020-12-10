@@ -1,4 +1,26 @@
 defmodule Mimic.DSL do
+  @moduledoc """
+  stubs and expectations can be expressed in a more natural way
+
+  ```elixir
+  use Mimic.DSL
+  ```
+
+  ```elixir
+  test "basic example" do
+    allow Calculator.add(_x, _y), do: :stub
+    expect Calculator.add(x, y), do: x + y
+    expect Calculator.mult(x, y), do: x * y
+
+    assert Calculator.add(2, 3) == 5
+    assert Calculator.mult(2, 3) == 6
+
+    assert Calculator.add(2, 3) == :stub
+  end
+  ```
+
+  """
+
   @doc false
   defmacro __using__(_opts) do
     quote do

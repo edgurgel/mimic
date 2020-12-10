@@ -19,6 +19,7 @@ defmodule Mimic.DSLTest do
     end
 
     assert Calculator.add(2, 2) == 4
+
     assert_raise FunctionClauseError, fn ->
       Calculator.add(3, 1)
     end
