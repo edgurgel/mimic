@@ -24,13 +24,13 @@ defmodule Mimic.DSL do
   @doc false
   defmacro __using__(_opts) do
     quote do
-      import Mimic, except: [allow: 3, expect: 3, expect: 4]
+      import Mimic, except: [stub: 3, expect: 3, expect: 4]
       import Mimic.DSL
       setup :verify_on_exit!
     end
   end
 
-  defmacro allow({{:., _, [module, f]}, _, args}, opts) do
+  defmacro stub({{:., _, [module, f]}, _, args}, opts) do
     body = Keyword.fetch!(opts, :do)
 
     function =
@@ -45,7 +45,7 @@ defmodule Mimic.DSL do
     end
   end
 
-  defmacro allow({:when, _, [{{:., _, [module, f]}, _, args}, guard_args]}, opts) do
+  defmacro stub({:when, _, [{{:., _, [module, f]}, _, args}, guard_args]}, opts) do
     body = Keyword.fetch!(opts, :do)
 
     function =

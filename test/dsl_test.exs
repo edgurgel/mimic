@@ -3,7 +3,7 @@ defmodule Mimic.DSLTest do
   use Mimic.DSL
 
   test "basic example" do
-    allow Calculator.add(_x, _y), do: :stub
+    stub Calculator.add(_x, _y), do: :stub
     expect Calculator.add(x, y), do: x + y
     expect Calculator.mult(x, y), do: x * y
 
@@ -13,8 +13,8 @@ defmodule Mimic.DSLTest do
     assert Calculator.add(2, 3) == :stub
   end
 
-  test "guards on allow" do
-    allow Calculator.add(x, y) when rem(x, 2) == 0 and y == 2 do
+  test "guards on stub" do
+    stub Calculator.add(x, y) when rem(x, 2) == 0 and y == 2 do
       x + y
     end
 
