@@ -24,7 +24,7 @@ defmodule Mimic.DSL do
   @doc false
   defmacro __using__(_opts) do
     quote do
-      import Mimic, except: [allow: 3, expect: 3, except: 4]
+      import Mimic, except: [allow: 3, expect: 3, expect: 4]
       import Mimic.DSL
       setup :verify_on_exit!
     end
