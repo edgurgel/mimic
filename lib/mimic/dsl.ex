@@ -19,6 +19,13 @@ defmodule Mimic.DSL do
   end
   ```
 
+  Support for expecting multiple calls
+  ```elixir
+  expect Calculator.add(x, y), num_calls: 2 do
+    x + y
+  end
+  ```
+
   """
 
   @doc false
@@ -60,8 +67,15 @@ defmodule Mimic.DSL do
     end
   end
 
-  defmacro expect({{:., _, [module, f]}, _, args}, opts) do
-    body = Keyword.fetch!(opts, :do)
+  defmacro expect(ast, opts \\ [], do_block)
+
+  defmacro expect({{:., _, [module, f]}, _, args}, opts, do_opts) do
+    num_calls =
+      Keyword.get_lazy(opts, :num_calls, fn ->
+        Keyword.get(do_opts, :num_calls, 1)
+      end)
+
+    body = Keyword.fetch!(do_opts, :do)
 
     function =
       quote do
@@ -71,12 +85,17 @@ defmodule Mimic.DSL do
       end
 
     quote do
-      Mimic.expect(unquote(module), unquote(f), unquote(function))
+      Mimic.expect(unquote(module), unquote(f), unquote(num_calls), unquote(function))
     end
   end
 
-  defmacro expect({:when, _, [{{:., _, [module, f]}, _, args}, guard_args]}, opts) do
-    body = Keyword.fetch!(opts, :do)
+  defmacro expect({:when, _, [{{:., _, [module, f]}, _, args}, guard_args]}, opts, do_opts) do
+    num_calls =
+      Keyword.get_lazy(opts, :num_calls, fn ->
+        Keyword.get(do_opts, :num_calls, 1)
+      end)
+
+    body = Keyword.fetch!(do_opts, :do)
 
     function =
       quote do
@@ -86,7 +105,7 @@ defmodule Mimic.DSL do
       end
 
     quote do
-      Mimic.expect(unquote(module), unquote(f), unquote(function))
+      Mimic.expect(unquote(module), unquote(f), unquote(num_calls), unquote(function))
     end
   end
 end
