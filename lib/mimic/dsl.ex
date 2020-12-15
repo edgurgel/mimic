@@ -8,7 +8,7 @@ defmodule Mimic.DSL do
 
   ```elixir
   test "basic example" do
-    allow Calculator.add(_x, _y), do: :stub
+    stub Calculator.add(_x, _y), do: :stub
     expect Calculator.add(x, y), do: x + y
     expect Calculator.mult(x, y), do: x * y
 
