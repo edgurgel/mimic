@@ -155,6 +155,25 @@ defined with expect & stub. This option is simpler but tests running
 concurrently will have undefined behaviour. It is important to run with `async: false`.
 One could use `:set_mimic_from_context` instead of using `:set_mimic_global` or `:set_mimic_private`. It will be private if `async: true`, global otherwise.
 
+## DSL Mode
+To use DSL Mode `use Mimic.DSL` rather than `use Mimic` in your test.  DSL Mode enables a more expressive api to the Mimic functionality.
+
+```elixir
+  use Mimic.DSL
+
+  test "basic example" do
+    stub Calculator.add(_x, _y), do: :stub
+    expect Calculator.add(x, y), do: x + y
+    expect Calculator.mult(x, y), do: x * y
+
+    assert Calculator.add(2, 3) == 5
+    assert Calculator.mult(2, 3) == 6
+
+    assert Calculator.add(2, 3) == :stub
+  end
+```
+
+
 ## Implementation Details & Performance
 
 After calling `Mimic.copy(MyModule)`, calls to functions belonging to this module will first go through an ETS table to check which pid sees what (stubs, expects or call original).
