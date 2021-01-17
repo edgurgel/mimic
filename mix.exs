@@ -31,7 +31,7 @@ defmodule Mimic.Mixfile do
   defp deps do
     [
       {:ex_doc, "~> 0.19", only: :dev},
-      {:credo, "~> 1.1.4", only: :dev}
+      {:credo, "~> 1.0", only: :dev}
     ]
   end
 
