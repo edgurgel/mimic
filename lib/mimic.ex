@@ -335,15 +335,16 @@ defmodule Mimic do
   """
   @spec copy(module()) :: :ok
   def copy(module) do
-    if not Code.ensure_compiled?(module) do
-      raise ArgumentError,
-            "Module #{inspect(module)} is not available"
+    case Code.ensure_compiled(module) do
+      {:error, _} ->
+        raise ArgumentError,
+              "Module #{inspect(module)} is not available"
+      {:module, module} ->
+        Mimic.Module.replace!(module)
+        ExUnit.after_suite(fn _ -> Server.reset(module) end)
+
+        :ok
     end
-
-    Mimic.Module.replace!(module)
-    ExUnit.after_suite(fn _ -> Server.reset(module) end)
-
-    :ok
   end
 
   @doc """
