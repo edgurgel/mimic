@@ -339,6 +339,7 @@ defmodule Mimic do
       {:error, _} ->
         raise ArgumentError,
               "Module #{inspect(module)} is not available"
+
       {:module, module} ->
         Mimic.Module.replace!(module)
         ExUnit.after_suite(fn _ -> Server.reset(module) end)
