@@ -1,4 +1,4 @@
-# Mimic [![Build Status](https://github.com/edgurgel/mimic/workflows/CI/badge.svg?branch=master)](https://github.com/edgurgel/mimic/actions?query=workflow%3ACI)
+# Mimic [![Build Status](https://github.com/edgurgel/mimic/workflows/CI/badge.svg?branch=master)](https://github.com/edgurgel/mimic/actions?query=workflow%3ACI) [![Hex pm](http://img.shields.io/hexpm/v/mimic.svg?style=flat)](https://hex.pm/packages/mimic)
 
 
 A sane way of using mocks in Elixir. It borrows a lot from both Meck & Mox! Thanks @eproxus & @josevalim
