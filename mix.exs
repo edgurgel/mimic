@@ -1,20 +1,22 @@
 defmodule Mimic.Mixfile do
   use Mix.Project
 
+  @source_url "https://github.com/edgurgel/mimic"
+  @version "1.5.0"
+
   def project do
     [
       app: :mimic,
-      version: "1.5.0",
+      version: @version,
       elixir: "~> 1.10",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       name: "Mimic",
-      description: "Mocks for Elixir functions",
       deps: deps(),
       package: package(),
-      test_coverage: [tool: Mimic.TestCover],
-      docs: [extras: ["README.md"], main: "readme"]
+      docs: docs(),
+      test_coverage: [tool: Mimic.TestCover]
     ]
   end
 
@@ -30,17 +32,33 @@ defmodule Mimic.Mixfile do
 
   defp deps do
     [
-      {:ex_doc, "~> 0.19", only: :dev},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, "~> 1.0", only: :dev}
     ]
   end
 
   defp package do
-    %{
+    [
+      description: "Mocks for Elixir functions",
       files: ["lib", "LICENSE", "mix.exs", "README.md"],
-      licenses: ["Apache 2"],
+      licenses: ["Apache-2"],
       maintainers: ["Eduardo Gurgel"],
-      links: %{"GitHub" => "https://github.com/edgurgel/mimic"}
-    }
+      links: %{
+        "GitHub" => @source_url
+      }
+    ]
+  end
+
+  defp docs do
+    [
+      extras: [
+        LICENSE: [title: "License"],
+        "README.md": [title: "Overview"]
+      ],
+      main: "readme",
+      source_url: @source_url,
+      source_ref: "v#{@version}",
+      formatters: ["html"]
+    ]
   end
 end
