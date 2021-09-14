@@ -1,6 +1,7 @@
 defmodule Mimic.Cover do
   @moduledoc """
-  Abuse cover private functions to move stuff around
+  Abuse cover private functions to move stuff around.
+
   Completely based on meck's solution:
   https://github.com/eproxus/meck/blob/2c7ba603416e95401500d7e116c5a829cb558665/src/meck_cover.erl#L67-L91
   """

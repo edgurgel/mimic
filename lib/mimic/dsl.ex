@@ -1,6 +1,6 @@
 defmodule Mimic.DSL do
   @moduledoc """
-  stubs and expectations can be expressed in a more natural way
+  Stubs and expectations can be expressed in a more natural way.
 
   ```elixir
   use Mimic.DSL
@@ -19,7 +19,8 @@ defmodule Mimic.DSL do
   end
   ```
 
-  Support for expecting multiple calls
+  Support for expecting multiple calls:
+
   ```elixir
   expect Calculator.add(x, y), num_calls: 2 do
     x + y
