@@ -16,6 +16,12 @@ defmodule Calculator do
   def mult(x, y), do: x * y
 end
 
+defmodule InverseCalculator do
+  @moduledoc false
+  @behaviour AddAdapter
+  def add(x, y), do: x - y
+end
+
 defmodule Counter do
   @moduledoc false
   def inc(counter), do: counter + 1
