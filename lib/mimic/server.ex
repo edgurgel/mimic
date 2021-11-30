@@ -3,6 +3,8 @@ defmodule Mimic.Server do
   alias Mimic.Cover
   @moduledoc false
 
+  @beam_code_table_name Mimic.Server.BeamCode
+
   defmodule State do
     @moduledoc false
     defstruct verify_on_exit: MapSet.new(),
@@ -10,7 +12,7 @@ defmodule Mimic.Server do
               global_pid: nil,
               stubs: %{},
               expectations: %{},
-              modules_beam: %{}
+              cover_data: %{}
   end
 
   defmodule Expectation do
@@ -58,19 +60,26 @@ defmodule Mimic.Server do
     GenServer.cast(__MODULE__, {:exit, pid})
   end
 
-  def store_beam_and_coverdata(module, beam, coverdata) do
-    GenServer.call(__MODULE__, {:store_beam_and_coverdata, module, beam, coverdata})
+  def store_filename_and_cover_data(module, filename, cover_data) do
+    GenServer.cast(__MODULE__, {:store_filename_and_cover_data, module, filename, cover_data})
+  end
+
+  def store_beam_code(module, beam_code, compiler_options) do
+    GenServer.call(__MODULE__, {:store_beam_code, module, beam_code, compiler_options})
   end
 
   def reset(module) do
     GenServer.call(__MODULE__, {:reset, module})
   end
 
+  def rename_module(module) do
+    GenServer.call(__MODULE__, {:rename_module, module}, 60_000)
+  end
+
   def apply(module, fn_name, args) do
     arity = Enum.count(args)
-    original_module = Mimic.Module.original(module)
 
-    if :erlang.function_exported(original_module, fn_name, arity) do
+    if :erlang.function_exported(module, fn_name, arity) do
       caller_pids = [self() | Process.get(:"$callers", [])]
 
       case allowed_pid(caller_pids, module) do
@@ -102,8 +111,17 @@ defmodule Mimic.Server do
     end
   end
 
-  defp apply_original(module, fn_name, args),
-    do: Kernel.apply(Mimic.Module.original(module), fn_name, args)
+  defp apply_original(module, fn_name, args) do
+    ensure_original_module_renamed!(module)
+
+    Kernel.apply(Mimic.Module.original(module), fn_name, args)
+  end
+
+  defp ensure_original_module_renamed!(module) do
+    if :ets.member(@beam_code_table_name, module) do
+      rename_module(module)
+    end
+  end
 
   defp allowed_pid(pids, module) do
     case :ets.lookup(__MODULE__, :mode) do
@@ -135,12 +153,18 @@ defmodule Mimic.Server do
 
   def init([]) do
     :ets.new(__MODULE__, [:named_table, :protected, :set])
+    :ets.new(@beam_code_table_name, [:named_table, :protected, :set, {:read_concurrency, true}])
     state = do_set_private_mode(%State{})
     {:ok, state}
   end
 
   def handle_cast({:exit, pid}, state) do
     {:noreply, clear_data_from_pid(pid, state)}
+  end
+
+  def handle_cast({:store_filename_and_cover_data, module, filename, cover_data}, state) do
+    cover_data = Map.put(state.cover_data, module, {filename, cover_data})
+    {:noreply, %{state | cover_data: cover_data}}
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
@@ -238,12 +262,10 @@ defmodule Mimic.Server do
 
       :ets.insert_new(__MODULE__, {{owner, module}, owner})
 
-      original_module = Mimic.Module.original(module)
-
       internal_functions = [__info__: 1, module_info: 0, module_info: 1]
 
       stubs =
-        original_module.module_info[:exports]
+        module.module_info[:exports]
         |> Enum.filter(&(&1 not in internal_functions))
         |> Enum.reduce(state.stubs, fn {fn_name, arity}, stubs ->
           func = stub_function(module, fn_name, arity)
@@ -324,20 +346,41 @@ defmodule Mimic.Server do
     {:reply, :ok, %{state | verify_on_exit: MapSet.put(state.verify_on_exit, pid)}}
   end
 
-  def handle_call({:store_beam_and_coverdata, module, beam, coverdata}, _from, state) do
-    modules_beam = Map.put(state.modules_beam, module, {beam, coverdata})
-    {:reply, :ok, %{state | modules_beam: modules_beam}}
-  end
-
   def handle_call({:reset, module}, _from, state) do
-    case state.modules_beam[module] do
-      {beam, coverdata} -> Cover.replace_coverdata!(module, beam, coverdata)
-      _ -> Mimic.Module.clear!(module)
+    case state.cover_data[module] do
+      {filename, cover_data} ->
+        Cover.replace_cover_data!(module, filename, cover_data)
+
+      _ ->
+        Mimic.Module.clear!(module)
+
+        module
+        |> Mimic.Module.original()
+        |> Mimic.Module.clear!()
     end
 
-    modules_beam = Map.delete(state.modules_beam, module)
+    cover_data = Map.delete(state.cover_data, module)
 
-    {:reply, :ok, %{state | modules_beam: modules_beam}}
+    {:reply, :ok, %{state | cover_data: cover_data}}
+  end
+
+  def handle_call({:rename_module, module}, _from, state) do
+    case :ets.lookup(@beam_code_table_name, module) do
+      [{^module, beam_code, compiler_options}] ->
+        Mimic.Module.rename_module(module, beam_code, compiler_options)
+        :ets.delete(@beam_code_table_name, module)
+
+      _ ->
+        :ok
+    end
+
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:store_beam_code, module, beam_code, compiler_options}, _from, state) do
+    :ets.insert_new(@beam_code_table_name, {module, beam_code, compiler_options})
+
+    {:reply, :ok, state}
   end
 
   defp apply_call_to_expectations(

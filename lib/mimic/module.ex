@@ -7,24 +7,21 @@ defmodule Mimic.Module do
   def clear!(module) do
     :code.purge(module)
     :code.delete(module)
-    :code.purge(original(module))
-    :code.delete(original(module))
     :ok
   end
 
   def replace!(module) do
-    backup_module = original(module)
-
     case :cover.is_compiled(module) do
-      {:file, beam_file} ->
-        coverdata_path = Cover.export_coverdata!(module)
-        Server.store_beam_and_coverdata(module, beam_file, coverdata_path)
+      {:file, filename} ->
+        {:ok, cover_data_path} = Cover.export_cover_data!(module)
+        Server.store_filename_and_cover_data(module, filename, cover_data_path)
 
       false ->
         :ok
     end
 
-    rename_module(module, backup_module)
+    Server.store_beam_code(module, beam_code(module), compiler_options(module))
+
     Code.compiler_options(ignore_module_conflict: true)
     create_mock(module)
     Code.compiler_options(ignore_module_conflict: false)
@@ -32,22 +29,20 @@ defmodule Mimic.Module do
     :ok
   end
 
-  defp rename_module(module, new_module) do
-    beam_code = beam_code(module)
+  def rename_module(module, beam_code, compiler_options) do
+    new_module = original(module)
 
     {:ok, {_, [{:abstract_code, {:raw_abstract_v1, forms}}]}} =
       :beam_lib.chunks(beam_code, [:abstract_code])
 
     forms = rename_attribute(forms, new_module)
 
-    case :compile.forms(forms, compiler_options(module)) do
+    case :compile.forms(forms, compiler_options) do
       {:ok, module_name, binary} ->
         load_binary(module_name, binary)
-        binary
 
       {:ok, module_name, binary, _warnings} ->
         load_binary(module_name, binary)
-        Binary
     end
   end
 

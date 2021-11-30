@@ -15,29 +15,45 @@ defmodule Mimic.Cover do
   end
 
   @doc false
-  def replace_coverdata!(module, original_beam, original_coverdata) do
+  def replace_cover_data!(module, original_filename, original_cover_data) do
     original_module = Mimic.Module.original(module)
-    path = export_coverdata!(original_module)
-    rewrite_coverdata!(path, module)
+
+    case export_cover_data!(original_module) do
+      {:ok, path} ->
+        rewrite_cover_data!(path, module)
+        Mimic.Module.clear!(original_module)
+        :cover.compile_beam(original_filename)
+        :ok = :cover.import(path)
+        File.rm(path)
+
+      _ ->
+        :ok
+    end
+
     Mimic.Module.clear!(module)
-    :cover.compile_beam(original_beam)
-    :ok = :cover.import(path)
-    :ok = :cover.import(original_coverdata)
-    File.rm(path)
-    File.rm(original_coverdata)
+
+    :ok = :cover.import(original_cover_data)
+    File.rm(original_cover_data)
   end
 
   @doc false
-  def export_coverdata!(module) do
+  def export_cover_data!(module) do
     path = Path.expand("#{module}-#{:os.getpid()}.coverdata", ".")
-    :ok = :cover.export(path, module)
-    path
+
+    case :cover.export(path, module) do
+      :ok ->
+        {:ok, path}
+
+      error ->
+        File.rm(path)
+        error
+    end
   end
 
-  defp rewrite_coverdata!(path, module) do
+  defp rewrite_cover_data!(path, module) do
     terms = get_terms(path)
     terms = replace_module_name(terms, module)
-    write_coverdata!(path, terms)
+    write_cover_data!(path, terms)
   end
 
   defp replace_module_name(terms, module) do
@@ -74,7 +90,7 @@ defmodule Mimic.Cover do
     end
   end
 
-  defp write_coverdata!(path, terms) do
+  defp write_cover_data!(path, terms) do
     {:ok, resource} = File.open(path, [:write, :binary, :raw])
     Enum.each(terms, fn term -> apply(:cover, :write, [term, resource]) end)
     File.close(resource)
