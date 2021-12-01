@@ -38,8 +38,8 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:stub, module, self()})
   end
 
-  def stubs_with(module, mocking_module) do
-    GenServer.call(__MODULE__, {:stubs_with, module, mocking_module, self()})
+  def stub_with(module, mocking_module) do
+    GenServer.call(__MODULE__, {:stub_with, module, mocking_module, self()})
   end
 
   def expect(module, fn_name, arity, num_calls, func) do
@@ -260,7 +260,7 @@ defmodule Mimic.Server do
     end
   end
 
-  def handle_call({:stubs_with, mocked_module, mocking_module, owner}, _from, state) do
+  def handle_call({:stub_with, mocked_module, mocking_module, owner}, _from, state) do
     if valid_mode?(state, owner) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 

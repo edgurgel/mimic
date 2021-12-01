@@ -182,17 +182,17 @@ defmodule Mimic do
         def add(a, b), do: a - b
       end
 
-      iex> Mimic.stubs_with(Calculator, InverseCalculator)
+      iex> Mimic.stub_with(Calculator, InverseCalculator)
       ...> Calculator.add(2, 4)
       ...> -2
 
   """
-  @spec stub(module()) :: module()
-  def stubs_with(module, mocking_module) do
+  @spec stub_with(module(), module()) :: module()
+  def stub_with(module, mocking_module) do
     raise_if_not_copied!(module)
 
     module
-    |> Server.stubs_with(mocking_module)
+    |> Server.stub_with(mocking_module)
     |> validate_server_response(
       "Stub cannot be called by the current process. Only the global owner is allowed."
     )

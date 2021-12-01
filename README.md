@@ -180,7 +180,7 @@ To use DSL Mode `use Mimic.DSL` rather than `use Mimic` in your test.  DSL Mode 
 ```
 
 ## Stubs with fake module
-`stubs_with/2` enable substitute function call of a module with another similar module
+`stub_with/2` enable substitute function call of a module with another similar module
 
 ```elixir
   defmodule BadCalculator do
@@ -189,7 +189,7 @@ To use DSL Mode `use Mimic.DSL` rather than `use Mimic` in your test.  DSL Mode 
   end
 
   test "basic example" do
-    stubs_with(Calculator, BadCalculator)
+    stub_with(Calculator, BadCalculator)
 
     assert Calculator.add(2, 3) == 6
     assert Calculator.mult(2, 3) == 5
