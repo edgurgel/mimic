@@ -1,7 +1,9 @@
 defmodule Mimic.Server do
+  @moduledoc false
+
   use GenServer
   alias Mimic.Cover
-  @moduledoc false
+  alias Mimic.ModuleLoader
 
   @beam_code_table_name Mimic.Server.BeamCode
 
@@ -72,8 +74,12 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:reset, module})
   end
 
-  def rename_module(module) do
-    GenServer.call(__MODULE__, {:rename_module, module}, 60_000)
+  def fetch_beam_code(module) do
+    :ets.lookup(@beam_code_table_name, module)
+  end
+
+  def delete_beam_code(module) do
+    GenServer.call(__MODULE__, {:delete_beam_code, module})
   end
 
   def apply(module, fn_name, args) do
@@ -119,7 +125,7 @@ defmodule Mimic.Server do
 
   defp ensure_original_module_renamed!(module) do
     if :ets.member(@beam_code_table_name, module) do
-      rename_module(module)
+      ModuleLoader.rename_module(module)
     end
   end
 
@@ -364,22 +370,15 @@ defmodule Mimic.Server do
     {:reply, :ok, %{state | cover_data: cover_data}}
   end
 
-  def handle_call({:rename_module, module}, _from, state) do
-    case :ets.lookup(@beam_code_table_name, module) do
-      [{^module, beam_code, compiler_options}] ->
-        Mimic.Module.rename_module(module, beam_code, compiler_options)
-        :ets.delete(@beam_code_table_name, module)
-
-      _ ->
-        :ok
-    end
+  def handle_call({:store_beam_code, module, beam_code, compiler_options}, _from, state) do
+    :ets.insert_new(@beam_code_table_name, {module, beam_code, compiler_options})
+    {:ok, _} = DynamicSupervisor.start_child(Mimic.Modules, {ModuleLoader, module})
 
     {:reply, :ok, state}
   end
 
-  def handle_call({:store_beam_code, module, beam_code, compiler_options}, _from, state) do
-    :ets.insert_new(@beam_code_table_name, {module, beam_code, compiler_options})
-
+  def handle_call({:delete_beam_code, module}, _from, state) do
+    :ets.delete(@beam_code_table_name, module)
     {:reply, :ok, state}
   end
 
