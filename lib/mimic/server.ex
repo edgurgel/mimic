@@ -63,7 +63,7 @@ defmodule Mimic.Server do
   end
 
   def reset(module) do
-    GenServer.call(__MODULE__, {:reset, module})
+    GenServer.call(__MODULE__, {:reset, module}, :infinity)
   end
 
   def apply(module, fn_name, args) do
