@@ -163,6 +163,42 @@ defmodule Mimic do
   end
 
   @doc """
+  Replace all public functions in `module` with public function in `mocking_module`.
+
+  If there's any public function in `module` that are not in `mocking_module`, it will raise if it's called
+
+  ## Arguments:
+
+    * `module` - The name of the module to stub.
+    * `mocking_module` - The name of the mocking module to stub the original module.
+
+  ## Raises:
+
+    * If `module` is not copied.
+    * If `function` is not called by the stubbing process.
+
+  ## Example
+      defmodule InverseCalculator do
+        def add(a, b), do: a - b
+      end
+
+      iex> Mimic.stub_with(Calculator, InverseCalculator)
+      ...> Calculator.add(2, 4)
+      ...> -2
+
+  """
+  @spec stub_with(module(), module()) :: module()
+  def stub_with(module, mocking_module) do
+    raise_if_not_copied!(module)
+
+    module
+    |> Server.stub_with(mocking_module)
+    |> validate_server_response(
+      "Stub cannot be called by the current process. Only the global owner is allowed."
+    )
+  end
+
+  @doc """
   Define a stub which must be called within an example.
 
   This function is almost identical to `stub/3` except that the replacement

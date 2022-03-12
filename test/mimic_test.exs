@@ -112,6 +112,23 @@ defmodule Mimic.Test do
     end
   end
 
+  describe "stub_with/1 private mode" do
+    setup :set_mimic_private
+
+    test "called multiple times" do
+      stub_with(Calculator, InverseCalculator)
+
+      assert Calculator.add(2, 3) == -1
+      assert Calculator.add(3, 2) == 1
+    end
+
+    test "stubs all functions which are not in mocking module" do
+      stub_with(Calculator, InverseCalculator)
+
+      assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(4, 9) end
+    end
+  end
+
   describe "stub/3 private mode" do
     setup :set_mimic_private
 

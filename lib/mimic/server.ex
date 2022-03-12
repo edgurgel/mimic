@@ -38,6 +38,10 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:stub, module, self()})
   end
 
+  def stub_with(module, mocking_module) do
+    GenServer.call(__MODULE__, {:stub_with, module, mocking_module, self()})
+  end
+
   def expect(module, fn_name, arity, num_calls, func) do
     GenServer.call(__MODULE__, {:expect, {module, fn_name, func, arity}, num_calls, self()})
   end
@@ -256,6 +260,52 @@ defmodule Mimic.Server do
     end
   end
 
+  def handle_call({:stub_with, mocked_module, mocking_module, owner}, _from, state) do
+    if valid_mode?(state, owner) do
+      monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
+
+      :ets.insert_new(__MODULE__, {{owner, mocked_module}, owner})
+
+      original_module = Mimic.Module.original(mocked_module)
+
+      internal_functions = [__info__: 1, module_info: 0, module_info: 1]
+
+      mocked_public_functions =
+        original_module.module_info[:exports]
+        |> Enum.filter(&(&1 not in internal_functions))
+        |> MapSet.new()
+
+      mocking_public_functions =
+        mocking_module.module_info[:exports]
+        |> Enum.filter(&(&1 not in internal_functions))
+        |> MapSet.new()
+
+      will_be_mocked_functions =
+        MapSet.intersection(mocking_public_functions, mocked_public_functions)
+
+      will_be_stubbed_functions =
+        MapSet.difference(mocked_public_functions, mocking_public_functions)
+
+      stubs =
+        will_be_mocked_functions
+        |> Enum.reduce(state.stubs, fn {fn_name, arity}, stubs ->
+          func = anonymize_module_function(mocking_module, fn_name, arity)
+          put_in(stubs, [Access.key(owner, %{}), {mocked_module, fn_name, arity}], func)
+        end)
+
+      stubs =
+        will_be_stubbed_functions
+        |> Enum.reduce(stubs, fn {fn_name, arity}, stubs ->
+          func = stub_function(mocked_module, fn_name, arity)
+          put_in(stubs, [Access.key(owner, %{}), {mocked_module, fn_name, arity}], func)
+        end)
+
+      {:reply, {:ok, mocked_module}, %{state | stubs: stubs}}
+    else
+      {:reply, {:error, :not_global_owner}, state}
+    end
+  end
+
   def handle_call({:expect, {module, fn_name, func, arity}, num_calls, owner}, _from, state) do
     if valid_mode?(state, owner) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
@@ -381,6 +431,23 @@ defmodule Mimic.Server do
 
           raise Mimic.UnexpectedCallError,
                 "Stub! Unexpected call to #{mfa} from #{inspect(self())}"
+      end
+
+    {fun, _} = Code.eval_quoted({:fn, [], clause})
+    fun
+  end
+
+  defp anonymize_module_function(module, fn_name, arity) do
+    args =
+      0..arity
+      |> Enum.to_list()
+      |> tl
+      |> Enum.map(fn i -> Macro.var(String.to_atom("arg_#{i}"), nil) end)
+
+    clause =
+      quote do
+        unquote_splicing(args) ->
+          apply(unquote(module), unquote(fn_name), [unquote_splicing(args)])
       end
 
     {fun, _} = Code.eval_quoted({:fn, [], clause})
