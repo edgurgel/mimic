@@ -20,6 +20,8 @@ defmodule Mimic.Server do
     defstruct func: nil, num_applied_calls: 0, num_calls: nil
   end
 
+  @long_timeout 60_000
+
   @spec allow(module, pid, pid) :: {:ok, module} | {:error, :global}
   def allow(module, owner_pid, allowed_pid) do
     GenServer.call(__MODULE__, {:allow, module, owner_pid, allowed_pid})
@@ -27,51 +29,55 @@ defmodule Mimic.Server do
 
   @spec verify(pid) :: non_neg_integer
   def verify(pid) do
-    GenServer.call(__MODULE__, {:verify, pid})
+    GenServer.call(__MODULE__, {:verify, pid}, @long_timeout)
   end
 
   @spec verify_on_exit(pid) :: :ok
   def verify_on_exit(pid) do
-    GenServer.call(__MODULE__, {:verify_on_exit, pid})
+    GenServer.call(__MODULE__, {:verify_on_exit, pid}, @long_timeout)
   end
 
   @spec stub(module, atom, arity, function) ::
           {:ok, module} | {:error, :not_global_owner} | {:error, {:module_not_copied, module}}
   def stub(module, fn_name, arity, func) do
-    GenServer.call(__MODULE__, {:stub, module, fn_name, func, arity, self()})
+    GenServer.call(__MODULE__, {:stub, module, fn_name, func, arity, self()}, @long_timeout)
   end
 
   @spec stub(module) ::
           {:ok, module} | {:error, :not_global_owner} | {:error, {:module_not_copied, module}}
   def stub(module) do
-    GenServer.call(__MODULE__, {:stub, module, self()})
+    GenServer.call(__MODULE__, {:stub, module, self()}, @long_timeout)
   end
 
   @spec stub_with(module, module) ::
           {:ok, module} | {:error, :not_global_owner} | {:error, {:module_not_copied, module}}
   def stub_with(module, mocking_module) do
-    GenServer.call(__MODULE__, {:stub_with, module, mocking_module, self()})
+    GenServer.call(__MODULE__, {:stub_with, module, mocking_module, self()}, @long_timeout)
   end
 
   @spec expect(module, atom, arity, non_neg_integer, function) ::
           {:ok, module} | {:error, :not_global_owner} | {:error, {:module_not_copied, module}}
   def expect(module, fn_name, arity, num_calls, func) do
-    GenServer.call(__MODULE__, {:expect, {module, fn_name, func, arity}, num_calls, self()})
+    GenServer.call(
+      __MODULE__,
+      {:expect, {module, fn_name, func, arity}, num_calls, self()},
+      @long_timeout
+    )
   end
 
   @spec set_global_mode(pid) :: :ok
   def set_global_mode(owner_pid) do
-    GenServer.call(__MODULE__, {:set_global_mode, owner_pid})
+    GenServer.call(__MODULE__, {:set_global_mode, owner_pid}, @long_timeout)
   end
 
   @spec set_private_mode :: :ok
   def set_private_mode do
-    GenServer.call(__MODULE__, :set_private_mode)
+    GenServer.call(__MODULE__, :set_private_mode, @long_timeout)
   end
 
   @spec get_mode :: :private | :global
   def get_mode do
-    GenServer.call(__MODULE__, :get_mode)
+    GenServer.call(__MODULE__, :get_mode, @long_timeout)
   end
 
   @spec exit(pid) :: :ok
@@ -81,12 +87,12 @@ defmodule Mimic.Server do
 
   @spec reset(module) :: :ok
   def reset(module) do
-    GenServer.call(__MODULE__, {:reset, module}, :infinity)
+    GenServer.call(__MODULE__, {:reset, module}, @long_timeout)
   end
 
   @spec mark_to_copy(module) :: :ok
   def mark_to_copy(module) do
-    GenServer.call(__MODULE__, {:mark_to_copy, module})
+    GenServer.call(__MODULE__, {:mark_to_copy, module}, @long_timeout)
   end
 
   def apply(module, fn_name, args) do
@@ -439,7 +445,7 @@ defmodule Mimic.Server do
     if state.modules_to_be_copied == MapSet.new() do
       tasks
       |> Map.values()
-      |> Task.await_many(:infinity)
+      |> Task.await_many(@long_timeout)
 
       {:reply, :ok, %{state | reset_tasks: %{}}}
     else
