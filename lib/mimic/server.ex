@@ -10,7 +10,9 @@ defmodule Mimic.Server do
               global_pid: nil,
               stubs: %{},
               expectations: %{},
-              modules_beam: %{}
+              modules_beam: %{},
+              modules_to_be_copied: MapSet.new(),
+              reset_tasks: %{}
   end
 
   defmodule Expectation do
@@ -18,56 +20,73 @@ defmodule Mimic.Server do
     defstruct func: nil, num_applied_calls: 0, num_calls: nil
   end
 
+  @spec allow(module, pid, pid) :: {:ok, module} | {:error, :global}
   def allow(module, owner_pid, allowed_pid) do
     GenServer.call(__MODULE__, {:allow, module, owner_pid, allowed_pid})
   end
 
+  @spec verify(pid) :: non_neg_integer
   def verify(pid) do
     GenServer.call(__MODULE__, {:verify, pid})
   end
 
+  @spec verify_on_exit(pid) :: :ok
   def verify_on_exit(pid) do
     GenServer.call(__MODULE__, {:verify_on_exit, pid})
   end
 
+  @spec stub(module, atom, arity, function) ::
+          {:ok, module} | {:error, :not_global_owner} | {:error, {:module_not_copied, module}}
   def stub(module, fn_name, arity, func) do
     GenServer.call(__MODULE__, {:stub, module, fn_name, func, arity, self()})
   end
 
+  @spec stub(module) ::
+          {:ok, module} | {:error, :not_global_owner} | {:error, {:module_not_copied, module}}
   def stub(module) do
     GenServer.call(__MODULE__, {:stub, module, self()})
   end
 
+  @spec stub_with(module, module) ::
+          {:ok, module} | {:error, :not_global_owner} | {:error, {:module_not_copied, module}}
   def stub_with(module, mocking_module) do
     GenServer.call(__MODULE__, {:stub_with, module, mocking_module, self()})
   end
 
+  @spec expect(module, atom, arity, non_neg_integer, function) ::
+          {:ok, module} | {:error, :not_global_owner} | {:error, {:module_not_copied, module}}
   def expect(module, fn_name, arity, num_calls, func) do
     GenServer.call(__MODULE__, {:expect, {module, fn_name, func, arity}, num_calls, self()})
   end
 
+  @spec set_global_mode(pid) :: :ok
   def set_global_mode(owner_pid) do
     GenServer.call(__MODULE__, {:set_global_mode, owner_pid})
   end
 
+  @spec set_private_mode :: :ok
   def set_private_mode do
     GenServer.call(__MODULE__, :set_private_mode)
   end
 
+  @spec get_mode :: :private | :global
   def get_mode do
     GenServer.call(__MODULE__, :get_mode)
   end
 
+  @spec exit(pid) :: :ok
   def exit(pid) do
     GenServer.cast(__MODULE__, {:exit, pid})
   end
 
-  def store_beam_and_coverdata(module, beam, coverdata) do
-    GenServer.call(__MODULE__, {:store_beam_and_coverdata, module, beam, coverdata})
-  end
-
+  @spec reset(module) :: :ok
   def reset(module) do
     GenServer.call(__MODULE__, {:reset, module}, :infinity)
+  end
+
+  @spec mark_to_copy(module) :: :ok
+  def mark_to_copy(module) do
+    GenServer.call(__MODULE__, {:mark_to_copy, module})
   end
 
   def apply(module, fn_name, args) do
@@ -158,6 +177,13 @@ defmodule Mimic.Server do
     {:noreply, new_state}
   end
 
+  # Reset task has successfully finished
+  def handle_info({ref, :ok}, state) do
+    reset_tasks = Map.delete(state.reset_tasks, ref)
+
+    {:noreply, %{state | reset_tasks: reset_tasks}}
+  end
+
   def handle_info(msg, state) do
     IO.puts("handle_info with #{inspect(msg)} not handled")
     {:noreply, state}
@@ -221,7 +247,8 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:stub, module, fn_name, func, arity, owner}, _from, state) do
-    if valid_mode?(state, owner) do
+    with {:ok, state} <- ensure_module_copied(module, state),
+         true <- valid_mode?(state, owner) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
       :ets.insert_new(__MODULE__, {{owner, module}, owner})
@@ -232,22 +259,25 @@ defmodule Mimic.Server do
          | stubs: put_in(state.stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func)
        }}
     else
-      {:reply, {:error, :not_global_owner}, state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+
+      false ->
+        {:reply, {:error, :not_global_owner}, state}
     end
   end
 
   def handle_call({:stub, module, owner}, _from, state) do
-    if valid_mode?(state, owner) do
+    with {:ok, state} <- ensure_module_copied(module, state),
+         true <- valid_mode?(state, owner) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
       :ets.insert_new(__MODULE__, {{owner, module}, owner})
 
-      original_module = Mimic.Module.original(module)
-
       internal_functions = [__info__: 1, module_info: 0, module_info: 1]
 
       stubs =
-        original_module.module_info[:exports]
+        module.module_info[:exports]
         |> Enum.filter(&(&1 not in internal_functions))
         |> Enum.reduce(state.stubs, fn {fn_name, arity}, stubs ->
           func = stub_function(module, fn_name, arity)
@@ -256,12 +286,17 @@ defmodule Mimic.Server do
 
       {:reply, {:ok, module}, %{state | stubs: stubs}}
     else
-      {:reply, {:error, :not_global_owner}, state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+
+      false ->
+        {:reply, {:error, :not_global_owner}, state}
     end
   end
 
   def handle_call({:stub_with, mocked_module, mocking_module, owner}, _from, state) do
-    if valid_mode?(state, owner) do
+    with {:ok, state} <- ensure_module_copied(mocked_module, state),
+         true <- valid_mode?(state, owner) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
       :ets.insert_new(__MODULE__, {{owner, mocked_module}, owner})
@@ -302,12 +337,17 @@ defmodule Mimic.Server do
 
       {:reply, {:ok, mocked_module}, %{state | stubs: stubs}}
     else
-      {:reply, {:error, :not_global_owner}, state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+
+      false ->
+        {:reply, {:error, :not_global_owner}, state}
     end
   end
 
   def handle_call({:expect, {module, fn_name, func, arity}, num_calls, owner}, _from, state) do
-    if valid_mode?(state, owner) do
+    with {:ok, state} <- ensure_module_copied(module, state),
+         true <- valid_mode?(state, owner) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
       :ets.insert_new(__MODULE__, {{owner, module}, owner})
@@ -323,7 +363,11 @@ defmodule Mimic.Server do
 
       {:reply, {:ok, module}, %{state | expectations: expectations}}
     else
-      {:reply, {:error, :not_global_owner}, state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+
+      false ->
+        {:reply, {:error, :not_global_owner}, state}
     end
   end
 
@@ -336,7 +380,7 @@ defmodule Mimic.Server do
   end
 
   def handle_call(:get_mode, _from, state) do
-    {:reply, {:ok, state.mode}, state}
+    {:reply, state.mode, state}
   end
 
   def handle_call({:allow, module, owner_pid, allowed_pid}, _from, state = %State{mode: :private}) do
@@ -380,14 +424,72 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:reset, module}, _from, state) do
+    state = %{state | modules_to_be_copied: MapSet.delete(state.modules_to_be_copied, module)}
+
+    tasks =
+      if Mimic.Module.copied?(module) do
+        task = Task.async(fn -> do_reset(module, state) end)
+
+        Map.put(state.reset_tasks, task.ref, task)
+      else
+        state.reset_tasks
+      end
+
+    # All modules have been reset. We should await all tasks now
+    if state.modules_to_be_copied == MapSet.new() do
+      tasks
+      |> Map.values()
+      |> Task.await_many(:infinity)
+
+      {:reply, :ok, %{state | reset_tasks: %{}}}
+    else
+      {:reply, :ok, %{state | reset_tasks: tasks}}
+    end
+  end
+
+  def handle_call({:mark_to_copy, module}, _from, state) do
+    # If cover is enabled call ensure_module_copied now
+    # Otherwise just store that the module that will be copied
+    # and ensure_module_copied/2 will copy it when
+    # expect, stub, reject is called
+    state = %{state | modules_to_be_copied: MapSet.put(state.modules_to_be_copied, module)}
+
+    state =
+      if Cover.enabled?(module) do
+        {:ok, state} = ensure_module_copied(module, state)
+        state
+      else
+        state
+      end
+
+    {:reply, :ok, state}
+  end
+
+  defp do_reset(module, state) do
     case state.modules_beam[module] do
       {beam, coverdata} -> Cover.replace_coverdata!(module, beam, coverdata)
       _ -> Mimic.Module.clear!(module)
     end
+  end
 
-    modules_beam = Map.delete(state.modules_beam, module)
+  defp ensure_module_copied(module, state) do
+    cond do
+      Mimic.Module.copied?(module) ->
+        {:ok, state}
 
-    {:reply, :ok, %{state | modules_beam: modules_beam}}
+      MapSet.member?(state.modules_to_be_copied, module) ->
+        case Mimic.Module.replace!(module) do
+          {beam_file, coverdata_path} ->
+            modules_beam = Map.put(state.modules_beam, module, {beam_file, coverdata_path})
+            {:ok, %{state | modules_beam: modules_beam}}
+
+          :ok ->
+            {:ok, state}
+        end
+
+      true ->
+        {:error, {:module_not_copied, module}}
+    end
   end
 
   defp apply_call_to_expectations(
