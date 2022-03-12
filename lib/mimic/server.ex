@@ -20,7 +20,7 @@ defmodule Mimic.Server do
     defstruct func: nil, num_applied_calls: 0, num_calls: nil
   end
 
-  @long_timeout 60_000
+  @long_timeout Application.compile_env(:mimic, :server_timeout, 60_000)
 
   @spec allow(module, pid, pid) :: {:ok, module} | {:error, :global}
   def allow(module, owner_pid, allowed_pid) do
