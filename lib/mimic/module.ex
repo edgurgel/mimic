@@ -2,8 +2,10 @@ defmodule Mimic.Module do
   alias Mimic.{Cover, Server}
   @moduledoc false
 
+  @spec original(module) :: module
   def original(module), do: "#{module}.Mimic.Original.Module" |> String.to_atom()
 
+  @spec clear!(module) :: :ok
   def clear!(module) do
     :code.purge(module)
     :code.delete(module)
@@ -12,24 +14,32 @@ defmodule Mimic.Module do
     :ok
   end
 
+  @spec replace!(module) :: :ok | {:cover.file(), binary}
   def replace!(module) do
     backup_module = original(module)
 
-    case :cover.is_compiled(module) do
-      {:file, beam_file} ->
-        coverdata_path = Cover.export_coverdata!(module)
-        Server.store_beam_and_coverdata(module, beam_file, coverdata_path)
+    result =
+      case :cover.is_compiled(module) do
+        {:file, beam_file} ->
+          coverdata_path = Cover.export_coverdata!(module)
 
-      false ->
-        :ok
-    end
+          {beam_file, coverdata_path}
+
+        false ->
+          :ok
+      end
 
     rename_module(module, backup_module)
     Code.compiler_options(ignore_module_conflict: true)
     create_mock(module)
     Code.compiler_options(ignore_module_conflict: false)
 
-    :ok
+    result
+  end
+
+  @spec copied?(module) :: boolean
+  def copied?(module) do
+    function_exported?(module, :__mimic_info__, 0)
   end
 
   defp rename_module(module, new_module) do

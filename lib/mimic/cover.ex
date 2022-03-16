@@ -6,6 +6,11 @@ defmodule Mimic.Cover do
   https://github.com/eproxus/meck/blob/2c7ba603416e95401500d7e116c5a829cb558665/src/meck_cover.erl#L67-L91
   """
 
+  @spec enabled?(module) :: boolean
+  def enabled?(module) do
+    :cover.is_compiled(module) != false
+  end
+
   @doc false
   def export_private_functions do
     {_, binary, _} = :code.get_object_code(:cover)
@@ -15,22 +20,22 @@ defmodule Mimic.Cover do
   end
 
   @doc false
-  def replace_coverdata!(module, original_beam, original_coverdata) do
+  def replace_coverdata!(module, original_beam, original_coverdata_path) do
     original_module = Mimic.Module.original(module)
     path = export_coverdata!(original_module)
     rewrite_coverdata!(path, module)
     Mimic.Module.clear!(module)
     :cover.compile_beam(original_beam)
-    :ok = :cover.import(path)
-    :ok = :cover.import(original_coverdata)
+    :ok = :cover.import(String.to_charlist(path))
+    :ok = :cover.import(String.to_charlist(original_coverdata_path))
     File.rm(path)
-    File.rm(original_coverdata)
+    File.rm(original_coverdata_path)
   end
 
   @doc false
   def export_coverdata!(module) do
     path = Path.expand("#{module}-#{:os.getpid()}.coverdata", ".")
-    :ok = :cover.export(path, module)
+    :ok = :cover.export(String.to_charlist(path), module)
     path
   end
 

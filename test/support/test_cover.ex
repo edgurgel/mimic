@@ -18,12 +18,14 @@ defmodule Mimic.TestCover do
     results =
       Enum.filter(results, fn
         {{Calculator, _, _}, _} -> true
+        {{NoStubs, _, _}, _} -> true
         _ -> false
       end)
 
     expected =
       {{Calculator, :add, 2}, 5} in results &&
-        {{Calculator, :mult, 2}, 5} in results
+        {{Calculator, :mult, 2}, 5} in results &&
+        {{NoStubs, :add, 2}, 2} in results
 
     unless expected do
       IO.puts("Cover results are incorrect!")

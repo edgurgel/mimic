@@ -1,4 +1,7 @@
+NoStubs.add(1, 2)
+NoStubs.add(3, 5)
 Calculator.add(2, 3)
+Mimic.copy(NoStubs)
 Mimic.copy(Calculator)
 Mimic.copy(Counter)
 ExUnit.start()

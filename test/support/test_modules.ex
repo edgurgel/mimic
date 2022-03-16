@@ -33,3 +33,8 @@ defmodule Enumerator do
   @moduledoc false
   def to_list(x, y), do: Enum.to_list(x..y)
 end
+
+defmodule NoStubs do
+  @moduledoc false
+  def add(x, y), do: x + y
+end
