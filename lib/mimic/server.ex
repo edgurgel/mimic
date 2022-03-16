@@ -90,7 +90,7 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:reset, module}, @long_timeout)
   end
 
-  @spec mark_to_copy(module) :: :ok
+  @spec mark_to_copy(module) :: :ok | {:error, {:module_already_copied, module}}
   def mark_to_copy(module) do
     GenServer.call(__MODULE__, {:mark_to_copy, module}, @long_timeout)
   end
@@ -454,21 +454,25 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:mark_to_copy, module}, _from, state) do
-    # If cover is enabled call ensure_module_copied now
-    # Otherwise just store that the module that will be copied
-    # and ensure_module_copied/2 will copy it when
-    # expect, stub, reject is called
-    state = %{state | modules_to_be_copied: MapSet.put(state.modules_to_be_copied, module)}
+    if MapSet.member?(state.modules_to_be_copied, module) do
+      {:reply, {:error, {:module_already_copied, module}}, state}
+    else
+      # If cover is enabled call ensure_module_copied now
+      # Otherwise just store that the module that will be copied
+      # and ensure_module_copied/2 will copy it when
+      # expect, stub, reject is called
+      state = %{state | modules_to_be_copied: MapSet.put(state.modules_to_be_copied, module)}
 
-    state =
-      if Cover.enabled?(module) do
-        {:ok, state} = ensure_module_copied(module, state)
-        state
-      else
-        state
-      end
+      state =
+        if Cover.enabled?(module) do
+          {:ok, state} = ensure_module_copied(module, state)
+          state
+        else
+          state
+        end
 
-    {:reply, :ok, state}
+      {:reply, :ok, state}
+    end
   end
 
   defp do_reset(module, state) do

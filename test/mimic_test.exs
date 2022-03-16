@@ -907,4 +907,12 @@ defmodule Mimic.Test do
       assert MultAdapter in behaviours
     end
   end
+
+  describe "copy/1" do
+    test "copying the same module raises" do
+      assert_raise ArgumentError,
+                   "Module Calculator has already been copied.  See docs for Mimic.copy/1",
+                   fn -> Mimic.copy(Calculator) end
+    end
+  end
 end
