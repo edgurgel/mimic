@@ -16,7 +16,7 @@ Just add `:mimic` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:mimic, "~> 1.5", only: :test}
+    {:mimic, "~> 1.7", only: :test}
   ]
 end
 ```
