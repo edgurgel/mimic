@@ -351,17 +351,35 @@ defmodule Mimic do
   """
   @spec copy(module()) :: :ok | no_return
   def copy(module) do
-    case Code.ensure_compiled(module) do
-      {:error, _} ->
-        raise ArgumentError,
-              "Module #{inspect(module)} is not available"
+    with {:module, module} <- Code.ensure_compiled(module),
+         :ok <- Mimic.Server.mark_to_copy(module) do
+      ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
+      :ok
+    else
+      {:error, reason}
+      when reason in [:embedded, :badfile, :nofile, :on_load_failure, :unavailable] ->
+        raise ArgumentError, "Module #{inspect(module)} is not available"
 
-      {:module, module} ->
-        Mimic.Server.mark_to_copy(module)
-        ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
-
-        :ok
+      error ->
+        validate_server_response(error, :copy)
     end
+
+    # case Code.ensure_compiled(module) do
+    # {:error, _} ->
+    # raise ArgumentError,
+    # "Module #{inspect(module)} is not available"
+
+    # {:module, module} ->
+    # case Mimic.Server.mark_to_copy(module) do
+    # :ok ->
+    # ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
+
+    # error ->
+    # validate_server_response(error, :copy)
+    # end
+
+    # :ok
+    # end
   end
 
   @doc """
@@ -482,5 +500,15 @@ defmodule Mimic do
   defp validate_server_response({:error, {:module_not_copied, module}}, _action) do
     raise ArgumentError,
           "Module #{inspect(module)} has not been copied.  See docs for Mimic.copy/1"
+  end
+
+  defp validate_server_response({:error, {:module_already_copied, module}}, :copy) do
+    raise ArgumentError,
+          "Module #{inspect(module)} has already been copied.  See docs for Mimic.copy/1"
+  end
+
+  defp validate_server_response(_, :copy) do
+    raise ArgumentError,
+          "Failed to copy module.  See docs for Mimic.copy/1"
   end
 end
