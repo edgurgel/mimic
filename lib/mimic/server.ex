@@ -436,6 +436,11 @@ defmodule Mimic.Server do
         state.reset_tasks
       end
 
+    # Clear the beam modules after starting the tasks (they read the state)
+    # This is important for umbrella apps since they'll run app after app
+    # and the modules that need to be covered will change between apps
+    state = %{state | modules_beam: Map.delete(state.modules_beam, module)}
+
     # All modules have been reset. We should await all tasks now
     if state.modules_to_be_copied == MapSet.new() do
       tasks
