@@ -22,21 +22,35 @@ defmodule Mimic.Cover do
   @doc false
   def replace_coverdata!(module, original_beam, original_coverdata_path) do
     original_module = Mimic.Module.original(module)
-    path = export_coverdata!(original_module)
-    rewrite_coverdata!(path, module)
-    Mimic.Module.clear!(module)
-    :cover.compile_beam(original_beam)
-    :ok = :cover.import(String.to_charlist(path))
-    :ok = :cover.import(String.to_charlist(original_coverdata_path))
-    File.rm(path)
-    File.rm(original_coverdata_path)
+
+    case export_coverdata!(original_module) do
+      nil ->
+        Mimic.Module.clear!(module)
+
+      path ->
+        rewrite_coverdata!(path, module)
+        Mimic.Module.clear!(module)
+        :cover.compile_beam(original_beam)
+        :ok = :cover.import(String.to_charlist(path))
+        :ok = :cover.import(String.to_charlist(original_coverdata_path))
+        File.rm(path)
+        File.rm(original_coverdata_path)
+    end
+
+    :ok
   end
 
   @doc false
   def export_coverdata!(module) do
-    path = Path.expand("#{module}-#{:os.getpid()}.coverdata", ".")
-    :ok = :cover.export(String.to_charlist(path), module)
-    path
+    path = Path.join(System.tmp_dir!(), "#{module}-#{:os.getpid()}.coverdata")
+
+    case :cover.export(String.to_charlist(path), module) do
+      :ok ->
+        path
+
+      _other ->
+        nil
+    end
   end
 
   defp rewrite_coverdata!(path, module) do

@@ -57,7 +57,7 @@ defmodule Mimic.Module do
 
       {:ok, module_name, binary, _warnings} ->
         load_binary(module_name, binary)
-        Binary
+        binary
     end
   end
 

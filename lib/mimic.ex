@@ -502,9 +502,17 @@ defmodule Mimic do
           "Module #{inspect(module)} has not been copied.  See docs for Mimic.copy/1"
   end
 
-  defp validate_server_response({:error, {:module_already_copied, module}}, :copy) do
-    raise ArgumentError,
-          "Module #{inspect(module)} has already been copied.  See docs for Mimic.copy/1"
+  defp validate_server_response(error = {:error, {:module_already_copied, _module}}, :copy) do
+    # Duplicates should just no-op.
+    # We already no-op in the server side so it's not hurting anything there.
+    # Raising here is problematic due to `ExUnit.after_suite` callbacks not running
+    # on empty test suites and therefore do not clean up properly.
+    # This is especially an issue in umbrella applications that run their tests using test
+    # partitioning which means sometimes an app can end up running in a partition where
+    # it comes out not having any tests to run causing them to not reset at all and 
+    # the next app may try to copy a module that wasn't cleaned up from the no test app before.
+    # Elixir bug: https://github.com/elixir-lang/elixir/issues/11746
+    error
   end
 
   defp validate_server_response(_, :copy) do
