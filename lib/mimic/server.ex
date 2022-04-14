@@ -424,11 +424,6 @@ defmodule Mimic.Server do
     {:reply, :ok, %{state | verify_on_exit: MapSet.put(state.verify_on_exit, pid)}}
   end
 
-  def handle_call({:store_beam_and_coverdata, module, beam, coverdata}, _from, state) do
-    modules_beam = Map.put(state.modules_beam, module, {beam, coverdata})
-    {:reply, :ok, %{state | modules_beam: modules_beam}}
-  end
-
   def handle_call({:reset, module}, _from, state) do
     state = %{state | modules_to_be_copied: MapSet.delete(state.modules_to_be_copied, module)}
 
