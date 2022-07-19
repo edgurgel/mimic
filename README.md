@@ -47,7 +47,7 @@ Then for the actual tests one could use it like this:
 use ExUnit.Case, async: true
 use Mimic
 
-test "invokes add once and mult twice" do
+test "invokes mult once and add twice" do
   Calculator
   |> stub(:add, fn x, y -> :stub end)
   |> expect(:add, fn x, y -> x + y end)
