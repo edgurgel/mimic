@@ -12,7 +12,16 @@ defmodule Mimic.Cover do
   end
 
   @doc false
-  def private_functions_exported?() do
+  def ensure_private_functions_exported do
+    if private_functions_exported?() do
+      export_private_functions()
+    end
+
+    :ok
+  end
+
+  @doc false
+  def private_functions_exported? do
     function_exported?(:cover, :get_term, 1)
   end
 
