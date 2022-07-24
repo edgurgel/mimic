@@ -12,6 +12,18 @@ defmodule Mimic.Cover do
   end
 
   @doc false
+  def setup_if_needed do
+    if cover_enabled?(), do: export_private_functions()
+    :ok
+  end
+
+  @doc false
+  def cover_enabled? do
+    # Check to to see if a public function is :cover is started
+    function_exported?(:cover, :start, 0)
+  end
+
+  @doc false
   def export_private_functions do
     {_, binary, _} = :code.get_object_code(:cover)
     {:ok, {_, [{_, {_, abstract_code}}]}} = :beam_lib.chunks(binary, [:abstract_code])

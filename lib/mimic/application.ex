@@ -4,7 +4,7 @@ defmodule Mimic.Application do
   @moduledoc false
 
   def start(_, _) do
-    Cover.export_private_functions()
+    Cover.setup_if_needed()
     children = [Server]
     Supervisor.start_link(children, name: Mimic.Supervisor, strategy: :one_for_one)
   end
