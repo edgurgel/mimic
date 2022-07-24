@@ -8,19 +8,13 @@ defmodule Mimic.Cover do
 
   @spec enabled?(module) :: boolean
   def enabled?(module) do
+    [module: module, is_compiled: :cover.is_compiled(module) != false] |> IO.inspect(label: "_____________________________ #{__MODULE__} AAAAAAAAAAAAAAAAA ")
     :cover.is_compiled(module) != false
   end
 
   @doc false
-  def setup_if_enabled do
-    if cover_enabled?(), do: export_private_functions()
-    :ok
-  end
-
-  @doc false
-  def cover_enabled? do
-    # Check to to see if a public function is :cover is started
-    function_exported?(:cover, :start, 0)
+  def private_functions_exported?() do
+    function_exported?(:cover, :get_term, 1)
   end
 
   @doc false

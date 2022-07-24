@@ -52,12 +52,12 @@ defmodule Mimic.Module do
 
     case :compile.forms(forms, compiler_options(module)) do
       {:ok, module_name, binary} ->
-        load_binary(module_name, binary)
+        load_binary(module_name, binary, Cover.enabled?(module))
         binary
 
       {:ok, module_name, binary, _warnings} ->
-        load_binary(module_name, binary)
-        Binary
+        load_binary(module_name, binary, Cover.enabled?(module))
+        binary
     end
   end
 
@@ -77,13 +77,24 @@ defmodule Mimic.Module do
     [:return_errors | [:debug_info | options]]
   end
 
-  defp load_binary(module, binary) do
+  defp load_binary(module, binary, cover_enabled?) do
     case :code.load_binary(module, '', binary) do
       {:module, ^module} -> :ok
       {:error, reason} -> exit({:error_loading_module, module, reason})
     end
 
-    apply(:cover, :compile_beams, [[{module, binary}]])
+    # Cover.export_private_functions()
+    # binding() |> IO.inspect(label: "_____________________________ #{__MODULE__} AAAAAAAAAAAAAAAAA ")
+    # :cover.compile_beams([{module, binary}])
+     # |> IO.inspect(label: "_____________________________ #{__MODULE__} AAAAAAAAAAAAAAAAA ")
+
+    if cover_enabled? do
+      if !Cover.private_functions_exported? do
+        Cover.export_private_functions()
+      end
+      # Call dynamically to avoid compiler warning about private function
+      apply(:cover, :compile_beams, [[{module, binary}]])
+    end
   end
 
   defp rename_attribute([{:attribute, line, :module, {_, vars}} | t], new_name) do

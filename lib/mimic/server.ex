@@ -463,8 +463,14 @@ defmodule Mimic.Server do
       # expect, stub, reject is called
       state = %{state | modules_to_be_copied: MapSet.put(state.modules_to_be_copied, module)}
 
+      [c_ena: Cover.enabled?(module), has: Cover.private_functions_exported?] |> IO.inspect(label: "_____________________________ #{__MODULE__} AAAAAAAAAAAAAAAAA ")
+
       state =
         if Cover.enabled?(module) do
+          if !Cover.private_functions_exported? do
+            Cover.export_private_functions()
+          end
+
           {:ok, state} = ensure_module_copied(module, state)
           state
         else
