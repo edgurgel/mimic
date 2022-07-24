@@ -12,7 +12,7 @@ defmodule Mimic.Cover do
   end
 
   @doc false
-  def setup_if_needed do
+  def setup_if_enabled do
     if cover_enabled?(), do: export_private_functions()
     :ok
   end
