@@ -84,7 +84,7 @@ defmodule Mimic.Module do
     end
 
     if cover_enabled? do
-      Cover.ensure_private_functions_exported()
+      Cover.export_private_functions()
       # Call dynamically to avoid compiler warning about private function which the above function
       # exported
       apply(:cover, :compile_beams, [[{module, binary}]])
