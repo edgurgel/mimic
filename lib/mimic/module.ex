@@ -83,11 +83,6 @@ defmodule Mimic.Module do
       {:error, reason} -> exit({:error_loading_module, module, reason})
     end
 
-    # Cover.export_private_functions()
-    # binding() |> IO.inspect(label: "_____________________________ #{__MODULE__} AAAAAAAAAAAAAAAAA ")
-    # :cover.compile_beams([{module, binary}])
-     # |> IO.inspect(label: "_____________________________ #{__MODULE__} AAAAAAAAAAAAAAAAA ")
-
     if cover_enabled? do
       if !Cover.private_functions_exported? do
         Cover.export_private_functions()

@@ -8,7 +8,6 @@ defmodule Mimic.Cover do
 
   @spec enabled?(module) :: boolean
   def enabled?(module) do
-    [module: module, is_compiled: :cover.is_compiled(module) != false] |> IO.inspect(label: "_____________________________ #{__MODULE__} AAAAAAAAAAAAAAAAA ")
     :cover.is_compiled(module) != false
   end
 
