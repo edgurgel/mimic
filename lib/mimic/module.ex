@@ -21,6 +21,8 @@ defmodule Mimic.Module do
     result =
       case :cover.is_compiled(module) do
         {:file, beam_file} ->
+          # We don't want to wipe the coverdata for this module in the process of
+          # renaming it. Save it for later
           coverdata_path = Cover.export_coverdata!(module)
 
           {beam_file, coverdata_path}
@@ -52,16 +54,18 @@ defmodule Mimic.Module do
 
     case :compile.forms(forms, compiler_options(module)) do
       {:ok, module_name, binary} ->
-        load_binary(module_name, binary, Cover.enabled?(module))
+        load_binary(module_name, binary, Cover.enabled_for?(module))
         binary
 
       {:ok, module_name, binary, _warnings} ->
-        load_binary(module_name, binary, Cover.enabled?(module))
+        load_binary(module_name, binary, Cover.enabled_for?(module))
         binary
     end
   end
 
   defp beam_code(module) do
+    # Note: If the module was compiled with :cover, this loads the version of the module pre
+    # coverage
     case :code.get_object_code(module) do
       {_, binary, _filename} -> binary
       _error -> throw({:object_code_not_found, module})
@@ -77,16 +81,21 @@ defmodule Mimic.Module do
     [:return_errors | [:debug_info | options]]
   end
 
-  defp load_binary(module, binary, cover_enabled?) do
+  defp load_binary(module, binary, enable_cover?) do
     case :code.load_binary(module, '', binary) do
       {:module, ^module} -> :ok
       {:error, reason} -> exit({:error_loading_module, module, reason})
     end
 
-    if cover_enabled? do
+    if enable_cover? do
       Cover.export_private_functions()
-      # Call dynamically to avoid compiler warning about private function which the above function
-      # exported
+      # Call dynamically to avoid compiler warning about private function being called
+      # (compile_beams) which the above function exported. See export_private_functions's comment
+      # for more info.
+      #
+      # beam_code/1 loads the not-cover-compiled version of the module, so we compile the
+      # renamed module using cover. This is so we can collect coverage data on the
+      # original module (which is called by the mock)
       apply(:cover, :compile_beams, [[{module, binary}]])
     end
   end

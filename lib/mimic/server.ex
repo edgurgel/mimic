@@ -464,7 +464,7 @@ defmodule Mimic.Server do
       state = %{state | modules_to_be_copied: MapSet.put(state.modules_to_be_copied, module)}
 
       state =
-        if Cover.enabled?(module) do
+        if Cover.enabled_for?(module) do
           {:ok, state} = ensure_module_copied(module, state)
           state
         else
@@ -477,7 +477,7 @@ defmodule Mimic.Server do
 
   defp do_reset(module, state) do
     case state.modules_beam[module] do
-      {beam, coverdata} -> Cover.replace_coverdata!(module, beam, coverdata)
+      {beam, coverdata} -> Cover.clear_module_and_import_coverdata!(module, beam, coverdata)
       _ -> Mimic.Module.clear!(module)
     end
   end
