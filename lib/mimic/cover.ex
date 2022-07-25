@@ -13,10 +13,14 @@ defmodule Mimic.Cover do
 
   @doc false
   def export_private_functions do
-    {_, binary, _} = :code.get_object_code(:cover)
-    {:ok, {_, [{_, {_, abstract_code}}]}} = :beam_lib.chunks(binary, [:abstract_code])
-    {:ok, module, binary} = :compile.forms(abstract_code, [:export_all])
-    :code.load_binary(module, '', binary)
+    if not private_functions_exported?() do
+      {_, binary, _} = :code.get_object_code(:cover)
+      {:ok, {_, [{_, {_, abstract_code}}]}} = :beam_lib.chunks(binary, [:abstract_code])
+      {:ok, module, binary} = :compile.forms(abstract_code, [:export_all])
+      {:module, :cover} = :code.load_binary(module, '', binary)
+    end
+
+    :ok
   end
 
   @doc false
@@ -37,6 +41,10 @@ defmodule Mimic.Cover do
     path = Path.expand("#{module}-#{:os.getpid()}.coverdata", ".")
     :ok = :cover.export(String.to_charlist(path), module)
     path
+  end
+
+  defp private_functions_exported? do
+    function_exported?(:cover, :get_term, 1)
   end
 
   defp rewrite_coverdata!(path, module) do
