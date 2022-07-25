@@ -12,11 +12,6 @@ defmodule Mimic.Cover do
   end
 
   @doc false
-  def private_functions_exported? do
-    function_exported?(:cover, :get_term, 1)
-  end
-
-  @doc false
   def export_private_functions do
     if not private_functions_exported?() do
       {_, binary, _} = :code.get_object_code(:cover)
@@ -46,6 +41,10 @@ defmodule Mimic.Cover do
     path = Path.expand("#{module}-#{:os.getpid()}.coverdata", ".")
     :ok = :cover.export(String.to_charlist(path), module)
     path
+  end
+
+  defp private_functions_exported? do
+    function_exported?(:cover, :get_term, 1)
   end
 
   defp rewrite_coverdata!(path, module) do
