@@ -1,17 +1,20 @@
 defmodule Mimic.Cover do
   @moduledoc """
-  Abuse cover private functions to move stuff around.
-
-  Completely based on meck's solution:
-  https://github.com/eproxus/meck/blob/2c7ba603416e95401500d7e116c5a829cb558665/src/meck_cover.erl#L67-L91
+  Ensures mocked modules still get coverage data despite being replaced by `Mimic.Module`.
+  Also ensures that coverage data from before moving the module around is not lost
   """
 
-  @spec enabled?(module) :: boolean
-  def enabled?(module) do
+  @spec enabled_for?(module) :: boolean
+  def enabled_for?(module) do
     :cover.is_compiled(module) != false
   end
 
   @doc false
+  # Hack to allow us to use private functions on the :cover module.
+  # Recompiles the :cover module but with all private functions as public.
+  # Completely based on meck's solution:
+  # https://github.com/eproxus/meck/blob/2c7ba603416e95401500d7e116c5a829cb558665/src/meck_cover.erl#L67-L91
+  # Is idempotent.
   def export_private_functions do
     if not private_functions_exported?() do
       {_, binary, _} = :code.get_object_code(:cover)
@@ -24,14 +27,21 @@ defmodule Mimic.Cover do
   end
 
   @doc false
-  def replace_coverdata!(module, original_beam, original_coverdata_path) do
-    original_module = Mimic.Module.original(module)
-    path = export_coverdata!(original_module)
+  # Resets the module and ensures we haven't lost its coverdata
+  def clear_module_and_import_coverdata!(module, original_beam_path, original_coverdata_path) do
+    path = module |> Mimic.Module.original() |> export_coverdata!()
     rewrite_coverdata!(path, module)
+
     Mimic.Module.clear!(module)
-    :cover.compile_beam(original_beam)
+    # Put back cover-compiled status for original module (don't need the private
+    # compile_beams function here because the file should exist for the original module)
+    :cover.compile_beam(original_beam_path)
+
+    # Original module's coverdata would be lost due to purging it otherwise
     :ok = :cover.import(String.to_charlist(path))
+    # Load coverdata from module from before the test
     :ok = :cover.import(String.to_charlist(original_coverdata_path))
+
     File.rm(path)
     File.rm(original_coverdata_path)
   end
