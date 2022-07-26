@@ -41,7 +41,7 @@ defmodule Mimic.Mixfile do
     [
       description: "Mocks for Elixir functions",
       files: ["lib", "LICENSE", "mix.exs", "README.md"],
-      licenses: ["Apache-2"],
+      licenses: ["Apache-2.0"],
       maintainers: ["Eduardo Gurgel"],
       links: %{
         "GitHub" => @source_url
