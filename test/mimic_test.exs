@@ -908,11 +908,23 @@ defmodule Mimic.Test do
     end
   end
 
-  describe "copy/1" do
-    test "copying the same module raises" do
-      assert_raise ArgumentError,
-                   "Module Calculator has already been copied.  See docs for Mimic.copy/1",
-                   fn -> Mimic.copy(Calculator) end
+  describe "copy/1 with duplicates does nothing" do
+    test "stubs still stub" do
+      parent_pid = self()
+
+      Mimic.copy(Calculator)
+      Mimic.copy(Calculator)
+
+      Calculator
+      |> stub(:add, fn x, y ->
+        send(parent_pid, {:add, x, y})
+        :stubbed
+      end)
+
+      Mimic.copy(Calculator)
+
+      assert Calculator.add(1, 2) == :stubbed
+      assert_receive {:add, 1, 2}
     end
   end
 end
