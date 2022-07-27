@@ -911,22 +911,24 @@ defmodule Mimic.Test do
   describe "copy/1 with duplicates does nothing" do
     setup :set_mimic_private
 
-    test "stubs still stub" do
-      parent_pid = self()
+    for i <- 1..10_000 do
+      test "stubs still stub #{i}" do
+        parent_pid = self()
 
-      Mimic.copy(Calculator)
-      Mimic.copy(Calculator)
+        Mimic.copy(Calculator)
+        Mimic.copy(Calculator)
 
-      Calculator
-      |> stub(:add, fn x, y ->
-        send(parent_pid, {:add, x, y})
-        :stubbed
-      end)
+        Calculator
+        |> stub(:add, fn x, y ->
+          send(parent_pid, {:add, x, y})
+          :stubbed
+        end)
 
-      Mimic.copy(Calculator)
+        Mimic.copy(Calculator)
 
-      assert Calculator.add(1, 2) == :stubbed
-      assert_receive {:add, 1, 2}
+        assert Calculator.add(1, 2) == :stubbed
+        assert_receive {:add, 1, 2}
+      end
     end
   end
 end
