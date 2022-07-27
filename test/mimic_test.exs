@@ -909,6 +909,8 @@ defmodule Mimic.Test do
   end
 
   describe "copy/1 with duplicates does nothing" do
+    setup :set_mimic_private
+
     test "stubs still stub" do
       parent_pid = self()
 
