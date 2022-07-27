@@ -95,7 +95,7 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:mark_to_copy, module}, @long_timeout)
   end
 
-  @spec mark_to_copy(module) :: :boolean
+  @spec marked_to_copy?(module) :: boolean
   def marked_to_copy?(module) do
     GenServer.call(__MODULE__, {:marked_to_copy?, module}, @long_timeout)
   end
