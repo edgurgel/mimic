@@ -344,6 +344,9 @@ defmodule Mimic do
   @doc """
   Prepare `module` for mocking.
 
+  Ideally, don't call this function twice for the same module, but in case you do, this function
+  is idempotent. It will not delete any `stub`s or `expect`s that you've set up.
+
   ## Arguments:
 
     * `module` - the name of the module to copy.
@@ -351,11 +354,15 @@ defmodule Mimic do
   """
   @spec copy(module()) :: :ok | no_return
   def copy(module) do
-    with {:module, module} <- Code.ensure_compiled(module),
+    with :ok <- ensure_module_not_copied(module),
+         {:module, module} <- Code.ensure_compiled(module),
          :ok <- Mimic.Server.mark_to_copy(module) do
       ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
       :ok
     else
+      {:error, :module_already_copied} ->
+        :ok
+
       {:error, reason}
       when reason in [:embedded, :badfile, :nofile, :on_load_failure, :unavailable] ->
         raise ArgumentError, "Module #{inspect(module)} is not available"
@@ -363,23 +370,6 @@ defmodule Mimic do
       error ->
         validate_server_response(error, :copy)
     end
-
-    # case Code.ensure_compiled(module) do
-    # {:error, _} ->
-    # raise ArgumentError,
-    # "Module #{inspect(module)} is not available"
-
-    # {:module, module} ->
-    # case Mimic.Server.mark_to_copy(module) do
-    # :ok ->
-    # ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
-
-    # error ->
-    # validate_server_response(error, :copy)
-    # end
-
-    # :ok
-    # end
   end
 
   @doc """
@@ -465,6 +455,13 @@ defmodule Mimic do
     Server.get_mode()
   end
 
+  defp ensure_module_not_copied(module) do
+    case Server.marked_to_copy?(module) do
+      false -> :ok
+      true -> {:error, :module_already_copied}
+    end
+  end
+
   defp raise_if_not_exported_function!(module, fn_name, arity) do
     unless function_exported?(module, fn_name, arity) do
       raise ArgumentError, "Function #{fn_name}/#{arity} not defined for #{inspect(module)}"
@@ -500,11 +497,6 @@ defmodule Mimic do
   defp validate_server_response({:error, {:module_not_copied, module}}, _action) do
     raise ArgumentError,
           "Module #{inspect(module)} has not been copied.  See docs for Mimic.copy/1"
-  end
-
-  defp validate_server_response({:error, {:module_already_copied, module}}, :copy) do
-    raise ArgumentError,
-          "Module #{inspect(module)} has already been copied.  See docs for Mimic.copy/1"
   end
 
   defp validate_server_response(_, :copy) do

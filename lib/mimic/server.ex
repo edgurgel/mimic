@@ -95,6 +95,11 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:mark_to_copy, module}, @long_timeout)
   end
 
+  @spec marked_to_copy?(module) :: boolean
+  def marked_to_copy?(module) do
+    GenServer.call(__MODULE__, {:marked_to_copy?, module}, @long_timeout)
+  end
+
   def apply(module, fn_name, args) do
     arity = Enum.count(args)
     original_module = Mimic.Module.original(module)
@@ -453,8 +458,12 @@ defmodule Mimic.Server do
     end
   end
 
+  def handle_call({:marked_to_copy?, module}, _from, state) do
+    {:reply, marked_to_copy?(module, state), state}
+  end
+
   def handle_call({:mark_to_copy, module}, _from, state) do
-    if MapSet.member?(state.modules_to_be_copied, module) do
+    if marked_to_copy?(module, state) do
       {:reply, {:error, {:module_already_copied, module}}, state}
     else
       # If cover is enabled call ensure_module_copied now
@@ -473,6 +482,10 @@ defmodule Mimic.Server do
 
       {:reply, :ok, state}
     end
+  end
+
+  defp marked_to_copy?(module, state) do
+    MapSet.member?(state.modules_to_be_copied, module)
   end
 
   defp do_reset(module, state) do
