@@ -360,7 +360,7 @@ defmodule Mimic do
       ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
       :ok
     else
-      {:error, :module_already_copied} ->
+      {:error, {:module_already_copied, _module}} ->
         :ok
 
       {:error, reason}
@@ -458,7 +458,7 @@ defmodule Mimic do
   defp ensure_module_not_copied(module) do
     case Server.marked_to_copy?(module) do
       false -> :ok
-      true -> {:error, :module_already_copied}
+      true -> {:error, {:module_already_copied, module}}
     end
   end
 
