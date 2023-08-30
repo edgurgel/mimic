@@ -112,7 +112,7 @@ defmodule Mimic.Test do
     end
   end
 
-  describe "stub_with/1 private mode" do
+  describe "stub_with/2 private mode" do
     setup :set_mimic_private
 
     test "called multiple times" do
@@ -126,6 +126,22 @@ defmodule Mimic.Test do
       stub_with(Calculator, InverseCalculator)
 
       assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(4, 9) end
+    end
+
+    test "undefined mocking module" do
+      assert_raise ArgumentError,
+                   "Module MissingModule not defined",
+                   fn ->
+                     stub_with(Calculator, MissingModule)
+                   end
+    end
+
+    test "undefined mocked module" do
+      assert_raise ArgumentError,
+                   "Module MissingModule has not been copied.  See docs for Mimic.copy/1",
+                   fn ->
+                     stub_with(MissingModule, InverseCalculator)
+                   end
     end
   end
 

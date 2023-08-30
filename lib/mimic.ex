@@ -182,6 +182,8 @@ defmodule Mimic do
   """
   @spec stub_with(module(), module()) :: module()
   def stub_with(module, mocking_module) do
+    raise_if_module_not_defined!(mocking_module)
+
     module
     |> Server.stub_with(mocking_module)
     |> validate_server_response(:stub)
@@ -465,6 +467,12 @@ defmodule Mimic do
   defp raise_if_not_exported_function!(module, fn_name, arity) do
     unless function_exported?(module, fn_name, arity) do
       raise ArgumentError, "Function #{fn_name}/#{arity} not defined for #{inspect(module)}"
+    end
+  end
+
+  defp raise_if_module_not_defined!(module) do
+    unless Code.ensure_loaded?(module) do
+      raise ArgumentError, "Module #{inspect(module)} not defined"
     end
   end
 
