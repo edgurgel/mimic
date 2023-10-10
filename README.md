@@ -237,7 +237,7 @@ There's a small fixed price to pay when mimic is used but it is unnoticeable for
 
 ## Acknowledgements
 
-Thanks to [@jamesotron](https://github.com/jamesotron) and [@alissonsales](http://github.com/alissonsales) for all the help! :tada:
+Thanks to [@jimsynz](https://github.com/jimsynz)  and [@alissonsales](http://github.com/alissonsales) for all the help! :tada:
 
 ## Copyright and License
 
