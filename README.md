@@ -114,7 +114,6 @@ Calculator
 verify!()
 ```
 
-
 ### Reject
 
 One may want to reject calls to a specific function. `reject/1` can be used to achieved this behaviour.
@@ -162,7 +161,8 @@ concurrently will have undefined behaviour. It is important to run with `async: 
 One could use `:set_mimic_from_context` instead of using `:set_mimic_global` or `:set_mimic_private`. It will be private if `async: true`, global otherwise.
 
 ## DSL Mode
-To use DSL Mode `use Mimic.DSL` rather than `use Mimic` in your test.  DSL Mode enables a more expressive api to the Mimic functionality.
+
+To use DSL Mode `use Mimic.DSL` rather than `use Mimic` in your test. DSL Mode enables a more expressive api to the Mimic functionality.
 
 ```elixir
   use Mimic.DSL
@@ -180,6 +180,7 @@ To use DSL Mode `use Mimic.DSL` rather than `use Mimic` in your test.  DSL Mode 
 ```
 
 ## Stubs with fake module
+
 `stub_with/2` enable substitute function call of a module with another similar module
 
 ```elixir
@@ -195,7 +196,6 @@ To use DSL Mode `use Mimic.DSL` rather than `use Mimic` in your test.  DSL Mode 
     assert Calculator.mult(2, 3) == 5
   end
 ```
-
 
 ## Implementation Details & Performance
 
@@ -237,7 +237,7 @@ There's a small fixed price to pay when mimic is used but it is unnoticeable for
 
 ## Acknowledgements
 
-Thanks to [@jamesotron](https://github.com/jamesotron) and [@alissonsales](http://github.com/alissonsales) for all the help! :tada:
+Thanks to [@jimsynz](https://github.com/jimsynz) and [@alissonsales](http://github.com/alissonsales) for all the help! :tada:
 
 ## Copyright and License
 
