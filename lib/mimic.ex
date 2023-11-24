@@ -40,7 +40,7 @@ defmodule Mimic do
 
   ```elixir
   test "invokes add from a process" do
-    Caculator
+    Calculator
     |> expect(:add, fn x, y -> x + y end)
 
     parent_pid = self()
@@ -323,7 +323,7 @@ defmodule Mimic do
 
   ```elixir
   test "invokes add from a task" do
-    Caculator
+    Calculator
     |> expect(:add, fn x, y -> x + y end)
 
     parent_pid = self()
