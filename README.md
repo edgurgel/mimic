@@ -1,4 +1,6 @@
+![Mimic logo](logo.png)
 # Mimic
+
 
 [![Build Status](https://github.com/edgurgel/mimic/workflows/CI/badge.svg?branch=master)](https://github.com/edgurgel/mimic/actions?query=workflow%3ACI)
 [![Module Version](https://img.shields.io/hexpm/v/mimic.svg)](https://hex.pm/packages/mimic)
