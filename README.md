@@ -1,8 +1,7 @@
 ![Mimic logo](logo.png)
 # Mimic
 
-
-[![Build Status](https://github.com/edgurgel/mimic/workflows/CI/badge.svg?branch=master)](https://github.com/edgurgel/mimic/actions?query=workflow%3ACI)
+[![CI](https://github.com/edgurgel/mimic/actions/workflows/main.yml/badge.svg)](https://github.com/edgurgel/mimic/actions/workflows/main.yml)
 [![Module Version](https://img.shields.io/hexpm/v/mimic.svg)](https://hex.pm/packages/mimic)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/mimic/)
 [![Total Download](https://img.shields.io/hexpm/dt/mimic.svg)](https://hex.pm/packages/mimic)
