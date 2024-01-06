@@ -240,6 +240,8 @@ There's a small fixed price to pay when mimic is used but it is unnoticeable for
 
 Thanks to [@jimsynz](https://github.com/jimsynz)  and [@alissonsales](http://github.com/alissonsales) for all the help! :tada:
 
+Thanks to [@mendokusai](https://github.com/mendokusai) for the nice logo!
+
 ## Copyright and License
 
 Copyright (c) 2016 Eduardo Gurgel
