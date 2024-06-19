@@ -945,4 +945,19 @@ defmodule Mimic.Test do
       assert_receive {:add, 1, 2}
     end
   end
+
+  describe "structs" do
+    test "copies struct fields" do
+      struct_fields =
+        Structs.__info__(:struct)
+        |> Enum.map(&Map.get(&1, :field))
+
+      Mimic.copy(Structs)
+
+      Structs
+      |> stub(:foo, fn -> :stubbed end)
+
+      assert Structs.__info__(:struct) |> Enum.map(&Map.get(&1, :field)) == struct_fields
+    end
+  end
 end

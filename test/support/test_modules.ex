@@ -38,3 +38,9 @@ defmodule NoStubs do
   @moduledoc false
   def add(x, y), do: x + y
 end
+
+defmodule Structs do
+  @moduledoc false
+  defstruct [:foo, :bar]
+  def foo, do: nil
+end

@@ -114,9 +114,18 @@ defmodule Mimic.Module do
     mimic_info = module_mimic_info()
     mimic_behaviours = generate_mimic_behaviours(module)
     mimic_functions = generate_mimic_functions(module)
-    quoted = [mimic_info | [mimic_behaviours ++ mimic_functions]]
+    mimic_struct = generate_mimic_struct(module)
+    quoted = [mimic_info, mimic_struct | mimic_behaviours ++ mimic_functions]
     Module.create(module, quoted, Macro.Env.location(__ENV__))
     module
+  end
+
+  defp generate_mimic_struct(module) do
+    if module.__info__(:struct) != nil do
+      quote do
+        defstruct unquote(for %{field: field} <- module.__info__(:struct), do: field)
+      end
+    end
   end
 
   defp module_mimic_info do
