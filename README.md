@@ -115,6 +115,31 @@ Calculator
 verify!()
 ```
 
+Using `expect/4` on intra-module functions will not work, unless the function is referenced by it's fully qualified name. 
+
+```elixir
+defmodule Calculator do
+  def mult(x, y) do
+    x * y
+  end
+
+  def negation(x) do
+    mult(x, -1)
+  end
+end
+
+Calculator
+|> expect(:mult, fn x, y -> x + y end)
+
+assert Calculator.negation(5) == -5
+
+# Will raise error because because BEAM optimises this case and jumps directly to the appropriate bytecode.
+# ** (Mimic.VerificationError) error while verifying mocks for #PID<0.207.0>:
+#   * expected Calculator.mult/2 to be invoked 1 time(s) but it has been called 0 time(s)
+verify!()
+```
+
+To ensure that the stubbed Mimic function is called, it can be referenced by `Calculator.mult/2` instead of `mult/2`.
 
 ### Reject
 
