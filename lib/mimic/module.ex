@@ -82,7 +82,7 @@ defmodule Mimic.Module do
   end
 
   defp load_binary(module, binary, enable_cover?) do
-    case :code.load_binary(module, '', binary) do
+    case :code.load_binary(module, ~c"", binary) do
       {:module, ^module} -> :ok
       {:error, reason} -> exit({:error_loading_module, module, reason})
     end

@@ -20,7 +20,7 @@ defmodule Mimic.Cover do
       {_, binary, _} = :code.get_object_code(:cover)
       {:ok, {_, [{_, {_, abstract_code}}]}} = :beam_lib.chunks(binary, [:abstract_code])
       {:ok, module, binary} = :compile.forms(abstract_code, [:export_all])
-      {:module, :cover} = :code.load_binary(module, '', binary)
+      {:module, :cover} = :code.load_binary(module, ~c"", binary)
     end
 
     :ok
