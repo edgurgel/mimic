@@ -954,12 +954,19 @@ defmodule Mimic.Test do
         Structs.__info__(:struct)
         |> Enum.map(&Map.get(&1, :field))
 
-      Mimic.copy(Structs)
-
       Structs
       |> stub(:foo, fn -> :stubbed end)
 
       assert Structs.__info__(:struct) |> Enum.map(&Map.get(&1, :field)) == struct_fields
+    end
+
+    test "protocol still works" do
+      Structs
+      |> stub(:foo, fn -> :stubbed end)
+
+      s = %Structs{foo: "abc", bar: "def"}
+
+      assert to_string(s) == "{abc} - {def}"
     end
   end
 end

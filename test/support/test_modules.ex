@@ -41,6 +41,13 @@ end
 
 defmodule Structs do
   @moduledoc false
-  defstruct [:foo, :bar]
+  @enforce_keys [:foo, :bar]
+  defstruct [:foo, :bar, default: "123"]
   def foo, do: nil
+end
+
+defimpl String.Chars, for: Structs do
+  def to_string(structs) do
+    "{#{structs.foo}} - {#{structs.bar}}"
+  end
 end
