@@ -122,7 +122,10 @@ defmodule Mimic.Module do
 
   defp generate_mimic_struct(module) do
     if module.__info__(:struct) != nil do
+      required_fields = for %{field: field, required: true} <- module.__info__(:struct), do: field
+
       quote do
+        @enforce_keys unquote(required_fields)
         defstruct unquote(for %{field: field} <- module.__info__(:struct), do: field)
       end
     end

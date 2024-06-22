@@ -950,14 +950,14 @@ defmodule Mimic.Test do
     setup :set_mimic_private
 
     test "copies struct fields" do
-      struct_fields =
-        Structs.__info__(:struct)
-        |> Enum.map(&Map.get(&1, :field))
-
       Structs
       |> stub(:foo, fn -> :stubbed end)
 
-      assert Structs.__info__(:struct) |> Enum.map(&Map.get(&1, :field)) == struct_fields
+      assert Structs.__info__(:struct) == [
+               %{field: :foo, required: true},
+               %{field: :bar, required: true},
+               %{field: :default, required: false}
+             ]
     end
 
     test "protocol still works" do
