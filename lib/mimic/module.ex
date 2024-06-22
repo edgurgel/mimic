@@ -121,7 +121,7 @@ defmodule Mimic.Module do
   end
 
   defp generate_mimic_struct(module) do
-    if module.__info__(:struct) != nil do
+    if function_exported?(module, :__info__, 1) && module.__info__(:struct) != nil do
       required_fields = for %{field: field, required: true} <- module.__info__(:struct), do: field
 
       quote do
