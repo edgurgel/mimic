@@ -949,7 +949,7 @@ defmodule Mimic.Test do
   describe "structs" do
     setup :set_mimic_private
 
-    test "copies struct fields" do
+    test "copies struct fields with required fields" do
       Structs
       |> stub(:foo, fn -> :stubbed end)
 
@@ -957,6 +957,16 @@ defmodule Mimic.Test do
                %{field: :foo, required: true},
                %{field: :bar, required: true},
                %{field: :default, required: false}
+             ]
+    end
+
+    test "copies struct fields" do
+      StructNoEnforceKeys
+      |> stub(:bar, fn -> :stubbed end)
+
+      assert StructNoEnforceKeys.__info__(:struct) == [
+               %{field: :foo, required: false},
+               %{field: :bar, required: false}
              ]
     end
 
