@@ -288,7 +288,7 @@ defmodule Mimic.Server do
       internal_functions = [__info__: 1, module_info: 0, module_info: 1]
 
       stubs =
-        module.module_info[:exports]
+        module.module_info(:exports)
         |> Enum.filter(&(&1 not in internal_functions))
         |> Enum.reduce(state.stubs, fn {fn_name, arity}, stubs ->
           func = stub_function(module, fn_name, arity)
@@ -317,12 +317,12 @@ defmodule Mimic.Server do
       internal_functions = [__info__: 1, module_info: 0, module_info: 1]
 
       mocked_public_functions =
-        original_module.module_info[:exports]
+        original_module.module_info(:exports)
         |> Enum.filter(&(&1 not in internal_functions))
         |> MapSet.new()
 
       mocking_public_functions =
-        mocking_module.module_info[:exports]
+        mocking_module.module_info(:exports)
         |> Enum.filter(&(&1 not in internal_functions))
         |> MapSet.new()
 

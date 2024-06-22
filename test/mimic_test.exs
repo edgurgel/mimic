@@ -947,6 +947,8 @@ defmodule Mimic.Test do
   end
 
   describe "structs" do
+    setup :set_mimic_private
+
     test "copies struct fields" do
       struct_fields =
         Structs.__info__(:struct)
