@@ -2,13 +2,13 @@ defmodule Mimic.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/edgurgel/mimic"
-  @version "1.7.4"
+  @version "1.8.0"
 
   def project do
     [
       app: :mimic,
       version: @version,
-      elixir: "~> 1.11",
+      elixir: "~> 1.16",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
