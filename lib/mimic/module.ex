@@ -11,6 +11,7 @@ defmodule Mimic.Module do
     :code.delete(module)
     :code.purge(original(module))
     :code.delete(original(module))
+    :cover.reset(original(module))
     :ok
   end
 
