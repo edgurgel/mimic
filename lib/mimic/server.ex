@@ -104,7 +104,7 @@ defmodule Mimic.Server do
     arity = Enum.count(args)
     original_module = Mimic.Module.original(module)
 
-    if :erlang.function_exported(original_module, fn_name, arity) do
+    if function_exported?(original_module, fn_name, arity) do
       caller_pids = [self() | Process.get(:"$callers", [])]
 
       case allowed_pid(caller_pids, module) do
