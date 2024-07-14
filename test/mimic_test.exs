@@ -228,9 +228,9 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module String has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
                    fn ->
-                     stub(String, :split, fn x, y -> x + y end)
+                     stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
     end
 
@@ -356,9 +356,9 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module String has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
                    fn ->
-                     stub(String, :split, fn x, y -> x + y end)
+                     stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
     end
 
@@ -436,9 +436,9 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module String has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
                    fn ->
-                     expect(String, :split, fn x, y -> x + y end)
+                     stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
     end
 
@@ -569,9 +569,9 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module String has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
                    fn ->
-                     expect(String, :split, fn x, y -> x + y end)
+                     stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
     end
 
@@ -607,9 +607,9 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module String has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
                    fn ->
-                     reject(String, :split, 2)
+                     stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
     end
 
@@ -680,9 +680,9 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module String has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
                    fn ->
-                     reject(String, :split, 2)
+                     stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
     end
 
