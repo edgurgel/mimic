@@ -138,7 +138,7 @@ defmodule Mimic.Test do
 
     test "undefined mocked module" do
       assert_raise ArgumentError,
-                   "Module MissingModule has not been copied.  See docs for Mimic.copy/1",
+                   "Module MissingModule has not been copied. See docs for Mimic.copy/1",
                    fn ->
                      stub_with(MissingModule, InverseCalculator)
                    end
@@ -228,7 +228,7 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied. See docs for Mimic.copy/1",
                    fn ->
                      stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
@@ -356,7 +356,7 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied. See docs for Mimic.copy/1",
                    fn ->
                      stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
@@ -436,7 +436,7 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied. See docs for Mimic.copy/1",
                    fn ->
                      stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
@@ -569,7 +569,7 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied. See docs for Mimic.copy/1",
                    fn ->
                      stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
@@ -607,7 +607,7 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied. See docs for Mimic.copy/1",
                    fn ->
                      stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end
@@ -653,7 +653,7 @@ defmodule Mimic.Test do
     end
   end
 
-  describe "reject3/ private mode" do
+  describe "reject/3 private mode" do
     setup :set_mimic_private
 
     test "expect no call to function" do
@@ -680,7 +680,7 @@ defmodule Mimic.Test do
 
     test "raises if a non copied module is given" do
       assert_raise ArgumentError,
-                   "Module NotCopiedModule has not been copied.  See docs for Mimic.copy/1",
+                   "Module NotCopiedModule has not been copied. See docs for Mimic.copy/1",
                    fn ->
                      stub(NotCopiedModule, :inc, fn x -> x - 1 end)
                    end

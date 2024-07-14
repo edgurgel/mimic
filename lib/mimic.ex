@@ -145,7 +145,7 @@ defmodule Mimic do
 
       iex> Mimic.stub(Calculator)
       ...> Calculator.add(2, 4)
-      ** (ArgumentError) Module Calculator has not been copied.  See docs for Mimic.copy/1
+      ** (ArgumentError) Module Calculator has not been copied. See docs for Mimic.copy/1
 
   """
   @spec stub(module()) :: module()
@@ -507,11 +507,11 @@ defmodule Mimic do
 
   defp validate_server_response({:error, {:module_not_copied, module}}, _action) do
     raise ArgumentError,
-          "Module #{inspect(module)} has not been copied.  See docs for Mimic.copy/1"
+          "Module #{inspect(module)} has not been copied. See docs for Mimic.copy/1"
   end
 
   defp validate_server_response(_, :copy) do
     raise ArgumentError,
-          "Failed to copy module.  See docs for Mimic.copy/1"
+          "Failed to copy module. See docs for Mimic.copy/1"
   end
 end
