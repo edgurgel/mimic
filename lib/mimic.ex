@@ -119,7 +119,7 @@ defmodule Mimic do
   """
   @spec stub(module(), atom(), function()) :: module
   def stub(module, function_name, function) do
-    arity = :erlang.fun_info(function)[:arity]
+    arity = Function.info(function)[:arity]
     raise_if_not_exported_function!(module, function_name, arity)
 
     module
@@ -228,7 +228,7 @@ defmodule Mimic do
   def expect(module, fn_name, num_calls, func)
       when is_atom(module) and is_atom(fn_name) and is_integer(num_calls) and num_calls >= 1 and
              is_function(func) do
-    arity = :erlang.fun_info(func)[:arity]
+    arity = Function.info(func)[:arity]
     raise_if_not_exported_function!(module, fn_name, arity)
 
     module
@@ -258,7 +258,7 @@ defmodule Mimic do
   """
   @spec reject(function) :: module
   def reject(function) when is_function(function) do
-    fun_info = :erlang.fun_info(function)
+    fun_info = Function.info(function)
     arity = fun_info[:arity]
     module = fun_info[:module]
     fn_name = fun_info[:name]
@@ -294,7 +294,7 @@ defmodule Mimic do
   @spec reject(module, atom, non_neg_integer) :: module
   def reject(module, function_name, arity) do
     raise_if_not_exported_function!(module, function_name, arity)
-    func = :erlang.make_fun(module, function_name, arity)
+    func = Function.capture(module, function_name, arity)
 
     module
     |> Server.expect(function_name, arity, 0, func)
