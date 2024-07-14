@@ -375,6 +375,38 @@ defmodule Mimic do
   end
 
   @doc """
+  Call original implementation of a function.
+
+  This function allows you to call the original implementation of a function,
+  even if it has been stubbed, rejected or expected.
+
+  ## Arguments:
+
+    * `module` - the name of the module in which we're calling.
+    * `function_name` - the name of the function we're calling.
+    * `args` - the arguments of the function we're calling.
+
+  ## Raises:
+
+    * If `function_name` does not exist in `module`.
+
+  ## Example:
+
+      iex> Mimic.call_original(Calculator, :add, [1, 2])
+      3
+
+  """
+  @spec call_original(module, atom, list) :: any
+  def call_original(module, function_name, args) do
+    arity = length(args)
+
+    raise_if_not_exported_function!(module, function_name, arity)
+    func = Function.capture(Mimic.Module.original(module), function_name, arity)
+
+    Kernel.apply(func, args)
+  end
+
+  @doc """
   Verifies the current process after it exits.
 
   If you want to verify expectations for all tests, you can use
