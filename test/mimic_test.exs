@@ -924,7 +924,7 @@ defmodule Mimic.Test do
     end
   end
 
-  describe "copy/1 with duplicates does nothing" do
+  describe "copy/1 with duplicates" do
     setup :set_mimic_private
 
     test "stubs still stub" do
@@ -943,6 +943,44 @@ defmodule Mimic.Test do
 
       assert Calculator.add(1, 2) == :stubbed
       assert_receive {:add, 1, 2}
+    end
+  end
+
+  describe "call_original/3" do
+    setup :set_mimic_private
+
+    test "calls original function even if it has been is stubbed" do
+      stub_with(Calculator, InverseCalculator)
+
+      assert call_original(Calculator, :add, [1, 2]) == 3
+    end
+
+    test "calls original function even if it has been rejected as a module function" do
+      Mimic.reject(Calculator, :add, 2)
+
+      assert call_original(Calculator, :add, [1, 2]) == 3
+    end
+
+    test "calls original function even if it has been rejected as a capture" do
+      Mimic.reject(&Calculator.add/2)
+
+      assert call_original(Calculator, :add, [1, 2]) == 3
+    end
+
+    test "when called on a function that has not been stubbed" do
+      assert call_original(Calculator, :add, [1, 2]) == 3
+    end
+
+    test "when called on a module that does not exist" do
+      assert_raise ArgumentError, "Function add/2 not defined for NonExistentModule", fn ->
+        call_original(NonExistentModule, :add, [1, 2])
+      end
+    end
+
+    test "when called on a function that does not exist" do
+      assert_raise ArgumentError, "Function non_existent_call/2 not defined for Calculator", fn ->
+        call_original(Calculator, :non_existent_call, [1, 2])
+      end
     end
   end
 

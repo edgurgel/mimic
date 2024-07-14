@@ -115,7 +115,7 @@ Calculator
 verify!()
 ```
 
-Using `expect/4` on intra-module functions will not work, unless the function is referenced by it's fully qualified name. 
+Using `expect/4` on intra-module functions will not work, unless the function is referenced by it's fully qualified name.
 
 ```elixir
 defmodule Calculator do
@@ -206,7 +206,7 @@ To use DSL Mode `use Mimic.DSL` rather than `use Mimic` in your test.  DSL Mode 
 ```
 
 ## Stubs with fake module
-`stub_with/2` enable substitute function call of a module with another similar module
+`stub_with/2` enable substitute function call of a module with another similar module.
 
 ```elixir
   defmodule BadCalculator do
@@ -222,6 +222,18 @@ To use DSL Mode `use Mimic.DSL` rather than `use Mimic` in your test.  DSL Mode 
   end
 ```
 
+## Calling the original
+`call_original/3` allows to call original unmocked version of the function.
+
+```elixir
+setup :set_mimic_private
+
+test "calls original function even if it has been is stubbed" do
+  stub_with(Calculator, InverseCalculator)
+
+  assert call_original(Calculator, :add, [1, 2]) == 3
+end
+```
 
 ## Implementation Details & Performance
 
