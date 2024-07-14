@@ -39,6 +39,11 @@ defmodule NoStubs do
   def add(x, y), do: x + y
 end
 
+defmodule NotCopiedModule do
+  @moduledoc false
+  def inc(counter), do: counter - 1
+end
+
 defmodule Structs do
   @moduledoc false
   @enforce_keys [:foo, :bar]
