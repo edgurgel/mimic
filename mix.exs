@@ -2,7 +2,7 @@ defmodule Mimic.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/edgurgel/mimic"
-  @version "1.8.2"
+  @version "1.9.0"
 
   def project do
     [
