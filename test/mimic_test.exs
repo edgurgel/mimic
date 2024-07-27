@@ -1,5 +1,5 @@
 defmodule Mimic.Test do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   import Mimic
 
   describe "no stub or expects private mode" do

@@ -90,6 +90,11 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:reset, module}, @long_timeout)
   end
 
+  @spec soft_reset(module) :: :ok
+  def soft_reset(module) do
+    GenServer.call(__MODULE__, {:soft_reset, module}, @long_timeout)
+  end
+
   @spec mark_to_copy(module) :: :ok | {:error, {:module_already_copied, module}}
   def mark_to_copy(module) do
     GenServer.call(__MODULE__, {:mark_to_copy, module}, @long_timeout)
@@ -427,6 +432,11 @@ defmodule Mimic.Server do
 
   def handle_call({:verify_on_exit, pid}, _from, state) do
     {:reply, :ok, %{state | verify_on_exit: MapSet.put(state.verify_on_exit, pid)}}
+  end
+
+  def handle_call({:soft_reset, _module}, _from, state) do
+    state = %{state | expectations: %{}, stubs: %{}, mode: :private, global_pid: nil}
+    {:reply, :ok, state}
   end
 
   def handle_call({:reset, module}, _from, state) do

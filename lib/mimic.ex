@@ -359,7 +359,12 @@ defmodule Mimic do
     with :ok <- ensure_module_not_copied(module),
          {:module, module} <- Code.ensure_compiled(module),
          :ok <- Mimic.Server.mark_to_copy(module) do
-      ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
+      if ExUnit.configuration()[:repeat_until_failure] do
+        ExUnit.after_suite(fn _ -> Mimic.Server.soft_reset(module) end)
+      else
+        ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
+      end
+
       :ok
     else
       {:error, {:module_already_copied, _module}} ->
