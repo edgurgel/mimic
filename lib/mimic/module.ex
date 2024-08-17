@@ -141,11 +141,7 @@ defmodule Mimic.Module do
 
     for {fn_name, arity} <- module.module_info(:exports),
         {fn_name, arity} not in internal_functions do
-      args =
-        0..arity
-        |> Enum.to_list()
-        |> tl()
-        |> Enum.map(&Macro.var(String.to_atom("arg_#{&1}"), Elixir))
+      args = Macro.generate_arguments(arity, module)
 
       quote do
         def unquote(fn_name)(unquote_splicing(args)) do
