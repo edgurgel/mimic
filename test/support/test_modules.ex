@@ -62,3 +62,27 @@ defimpl String.Chars, for: Structs do
     "{#{structs.foo}} - {#{structs.bar}}"
   end
 end
+
+defmodule Typecheck.Counter do
+  @moduledoc false
+
+  @spec inc(number) :: number
+  def inc(counter), do: counter + 1
+
+  @spec dec(number) :: number
+  def dec(counter), do: counter - 1
+
+  @spec add(number, number) :: number
+  def add(counter, x), do: counter + x
+end
+
+defmodule Typecheck.Calculator do
+  @moduledoc false
+  @behaviour AddAdapter
+  @behaviour MultAdapter
+
+  def add(x, y), do: x + y
+
+  @spec mult(integer, integer) :: integer
+  def mult(x, y), do: x * y
+end
