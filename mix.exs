@@ -2,7 +2,7 @@ defmodule Mimic.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/edgurgel/mimic"
-  @version "1.9.0"
+  @version "1.10.0"
 
   def project do
     [
@@ -32,6 +32,7 @@ defmodule Mimic.Mixfile do
 
   defp deps do
     [
+      {:ham, "~> 0.1"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, "~> 1.0", only: :dev}
     ]

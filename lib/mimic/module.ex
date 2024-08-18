@@ -15,8 +15,8 @@ defmodule Mimic.Module do
     :ok
   end
 
-  @spec replace!(module) :: :ok | {:cover.file(), binary}
-  def replace!(module) do
+  @spec replace!(module, keyword) :: :ok | {:cover.file(), binary}
+  def replace!(module, opts) do
     backup_module = original(module)
 
     result =
@@ -34,7 +34,7 @@ defmodule Mimic.Module do
 
     rename_module(module, backup_module)
     Code.compiler_options(ignore_module_conflict: true)
-    create_mock(module)
+    create_mock(module, Map.new(opts))
     Code.compiler_options(ignore_module_conflict: false)
 
     result
@@ -111,8 +111,8 @@ defmodule Mimic.Module do
 
   defp rename_attribute([h | t], new_name), do: [h | rename_attribute(t, new_name)]
 
-  defp create_mock(module) do
-    mimic_info = module_mimic_info()
+  defp create_mock(module, opts) do
+    mimic_info = module_mimic_info(opts)
     mimic_behaviours = generate_mimic_behaviours(module)
     mimic_functions = generate_mimic_functions(module)
     mimic_struct = generate_mimic_struct(module)
@@ -132,8 +132,8 @@ defmodule Mimic.Module do
     end
   end
 
-  defp module_mimic_info do
-    quote do: def(__mimic_info__, do: :ok)
+  defp module_mimic_info(opts) do
+    quote do: def(__mimic_info__, do: {:ok, unquote(Macro.escape(opts))})
   end
 
   defp generate_mimic_functions(module) do

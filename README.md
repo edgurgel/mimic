@@ -17,7 +17,7 @@ Just add `:mimic` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:mimic, "~> 1.7", only: :test}
+    {:mimic, "~> 1.10", only: :test}
   ]
 end
 ```
@@ -234,6 +234,27 @@ test "calls original function even if it has been is stubbed" do
   assert call_original(Calculator, :add, [1, 2]) == 3
 end
 ```
+
+## Experimental type checking for copied modules
+
+One can pass `type_check: true` when a module is copied to also get the function expected/stubbed to
+validate the arguments and return value using [Ham](https://github.com/edgurgel/ham) which is essentially
+what [Hammox](https://github.com/msz/hammox) improved on Mox.
+
+```elixir
+Mimic.copy(:cowboy_req, type_check: true)
+```
+
+If there is any problem with the arguments or return values of the stubbed functions on your tests you might see
+an error like this one:
+
+```elixir
+     ** (Mimic.TypeCheckError) :cowboy_req.parse_qs/1: 1st argument value %{} does not match 1st parameter's type :cowboy_req.req().
+       Could not find a map entry matching required(:method) => binary().
+```
+
+This feature is experimental at the moment which means that it might change a little bit how this
+is configured and used. Feedback is welcome!
 
 ## Implementation Details & Performance
 
