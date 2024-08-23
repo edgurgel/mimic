@@ -40,7 +40,7 @@ defmodule Mimic.Mixfile do
   defp package do
     [
       description: "Mocks for Elixir functions",
-      files: ["lib", "LICENSE", "mix.exs", "README.md"],
+      files: ["lib", "LICENSE", "mix.exs", "README.md", ".formatter.exs"],
       licenses: ["Apache-2.0"],
       maintainers: ["Eduardo Gurgel"],
       links: %{
