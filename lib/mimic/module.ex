@@ -123,11 +123,27 @@ defmodule Mimic.Module do
 
   defp generate_mimic_struct(module) do
     if function_exported?(module, :__info__, 1) && module.__info__(:struct) != nil do
-      required_fields = for %{field: field, required: true} <- module.__info__(:struct), do: field
+      struct_info =
+        module.__info__(:struct)
+        |> Enum.split_with(& &1.required)
+        |> Tuple.to_list()
+        |> List.flatten()
+
+      required_fields = for %{field: field, required: true} <- struct_info, do: field
+      struct_template = Map.from_struct(module.__struct__())
+
+      struct_params =
+        for %{field: field, required: required} <- struct_info do
+          if required do
+            field
+          else
+            {field, Macro.escape(struct_template[field])}
+          end
+        end
 
       quote do
         @enforce_keys unquote(required_fields)
-        defstruct unquote(for %{field: field} <- module.__info__(:struct), do: field)
+        defstruct unquote(struct_params)
       end
     end
   end

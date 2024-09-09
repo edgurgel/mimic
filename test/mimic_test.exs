@@ -994,8 +994,21 @@ defmodule Mimic.Test do
       assert Structs.__info__(:struct) == [
                %{field: :foo, required: true},
                %{field: :bar, required: true},
-               %{field: :default, required: false}
+               %{field: :default, required: false},
+               %{field: :map_default, required: false}
              ]
+    end
+
+    test "copies struct fields with default values" do
+      Structs
+      |> stub(:foo, fn -> :stubbed end)
+
+      assert Structs.__struct__() == %Structs{
+               foo: nil,
+               bar: nil,
+               default: "123",
+               map_default: %{}
+             }
     end
 
     test "copies struct fields" do
