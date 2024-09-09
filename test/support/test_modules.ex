@@ -47,7 +47,7 @@ end
 defmodule Structs do
   @moduledoc false
   @enforce_keys [:foo, :bar]
-  defstruct [:foo, :bar, default: "123"]
+  defstruct [:foo, :bar, default: "123", map_default: %{}]
   def foo, do: nil
 end
 
