@@ -402,6 +402,9 @@ defmodule Mimic.Server do
     case :ets.lookup(__MODULE__, {owner_pid, module}) do
       [{{^owner_pid, ^module}, actual_owner_pid}] ->
         :ets.insert(__MODULE__, {{allowed_pid, module}, actual_owner_pid})
+
+      [] ->
+        :ok
     end
 
     {:reply, {:ok, module}, state}
