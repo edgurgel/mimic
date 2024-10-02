@@ -796,6 +796,13 @@ defmodule Mimic.Test do
       assert mult_result == :stubbed
     end
 
+    test "doesn't raise if no expectation defined" do
+      child_pid = spawn_link(fn -> :ok end)
+
+      Calculator
+      |> allow(self(), child_pid)
+    end
+
     test "allows different processes to share mocks from child process" do
       parent_pid = self()
 
