@@ -404,7 +404,7 @@ defmodule Mimic.Server do
         :ets.insert(__MODULE__, {{allowed_pid, module}, actual_owner_pid})
 
       [] ->
-        :ok
+        :ets.insert(__MODULE__, {{allowed_pid, module}, owner_pid})
     end
 
     {:reply, {:ok, module}, state}
