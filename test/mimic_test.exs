@@ -2,6 +2,13 @@ defmodule Mimic.Test do
   use ExUnit.Case, async: true
   import Mimic
 
+  @expected 100
+  @expected_1 200
+  @expected_2 300
+
+  @stubbed 400
+  @private_stub 500
+
   describe "no stub or expects private mode" do
     setup :set_mimic_private
 
@@ -26,12 +33,12 @@ defmodule Mimic.Test do
 
       spawn_link(fn ->
         Mimic.set_mimic_global()
-        stub(Calculator, :add, fn _, _ -> :stub end)
+        stub(Calculator, :add, fn _, _ -> @stubbed end)
 
         child_pid = self()
 
         spawn_link(fn ->
-          assert Calculator.add(3, 7) == :stub
+          assert Calculator.add(3, 7) == @stubbed
 
           send(child_pid, :ok_child)
         end)
@@ -43,8 +50,8 @@ defmodule Mimic.Test do
       assert_receive :ok
 
       :timer.sleep(500)
-      stub(Calculator, :add, fn _, _ -> :private_stub end)
-      assert Calculator.add(3, 7) == :private_stub
+      stub(Calculator, :add, fn _, _ -> @private_stub end)
+      assert Calculator.add(3, 7) == @private_stub
     end
   end
 
@@ -194,9 +201,9 @@ defmodule Mimic.Test do
     test "respects calls precedence" do
       Calculator
       |> stub(:add, fn x, y -> x + y end)
-      |> expect(:add, fn _, _ -> :expected end)
+      |> expect(:add, fn _, _ -> @expected end)
 
-      assert Calculator.add(1, 1) == :expected
+      assert Calculator.add(1, 1) == @expected
       verify!()
     end
 
@@ -208,13 +215,13 @@ defmodule Mimic.Test do
 
     test "invokes stub after expectations are fulfilled" do
       Calculator
-      |> stub(:add, fn _x, _y -> :stub end)
-      |> expect(:add, fn _, _ -> :expected_1 end)
-      |> expect(:add, fn _, _ -> :expected_2 end)
+      |> stub(:add, fn _x, _y -> @stubbed end)
+      |> expect(:add, fn _, _ -> @expected_1 end)
+      |> expect(:add, fn _, _ -> @expected_2 end)
 
-      assert Calculator.add(1, 1) == :expected_1
-      assert Calculator.add(1, 1) == :expected_2
-      assert Calculator.add(1, 1) == :stub
+      assert Calculator.add(1, 1) == @expected_1
+      assert Calculator.add(1, 1) == @expected_2
+      assert Calculator.add(1, 1) == @stubbed
       verify!()
     end
 
@@ -274,12 +281,12 @@ defmodule Mimic.Test do
     test "respects calls precedence" do
       Calculator
       |> stub(:add, fn x, y -> x + y end)
-      |> expect(:add, fn _, _ -> :expected end)
+      |> expect(:add, fn _, _ -> @expected end)
 
       parent_pid = self()
 
       spawn_link(fn ->
-        assert Calculator.add(1, 1) == :expected
+        assert Calculator.add(1, 1) == @expected
 
         send(parent_pid, :ok)
       end)
@@ -304,16 +311,16 @@ defmodule Mimic.Test do
 
     test "invokes stub after expectations are fulfilled" do
       Calculator
-      |> stub(:add, fn _x, _y -> :stub end)
-      |> expect(:add, fn _, _ -> :expected end)
-      |> expect(:add, fn _, _ -> :expected end)
+      |> stub(:add, fn _x, _y -> @stubbed end)
+      |> expect(:add, fn _, _ -> @expected end)
+      |> expect(:add, fn _, _ -> @expected end)
 
       parent_pid = self()
 
       spawn_link(fn ->
-        assert Calculator.add(1, 1) == :expected
-        assert Calculator.add(1, 1) == :expected
-        assert Calculator.add(1, 1) == :stub
+        assert Calculator.add(1, 1) == @expected
+        assert Calculator.add(1, 1) == @expected
+        assert Calculator.add(1, 1) == @stubbed
 
         send(parent_pid, :ok)
       end)
@@ -387,19 +394,19 @@ defmodule Mimic.Test do
 
     test "stacking expectations" do
       Calculator
-      |> expect(:add, fn _x, _y -> :first end)
-      |> expect(:add, fn _x, _y -> :second end)
+      |> expect(:add, fn _x, _y -> @expected_1 end)
+      |> expect(:add, fn _x, _y -> @expected_2 end)
 
-      assert Calculator.add(4, :_) == :first
-      assert Calculator.add(5, :_) == :second
+      assert Calculator.add(4, 0) == @expected_1
+      assert Calculator.add(5, 0) == @expected_2
     end
 
     test "expect multiple calls" do
       Calculator
-      |> expect(:add, 2, fn x, y -> {:add, x, y} end)
+      |> expect(:add, 2, fn x, y -> x + y + 1 end)
 
-      assert Calculator.add(4, 3) == {:add, 4, 3}
-      assert Calculator.add(5, 2) == {:add, 5, 2}
+      assert Calculator.add(4, 3) == 4 + 3 + 1
+      assert Calculator.add(5, 2) == 5 + 2 + 1
     end
 
     test "expectation not being fulfilled" do
@@ -425,11 +432,11 @@ defmodule Mimic.Test do
 
     test "expecting when no expectation is defined calls original" do
       Calculator
-      |> expect(:add, fn x, _y -> {:mock, x + 2} end)
-      |> expect(:mult, fn x, _y -> {:mock, x * 2} end)
+      |> expect(:add, fn x, _y -> x + 2 end)
+      |> expect(:mult, fn x, _y -> x * 2 end)
 
-      assert Calculator.add(4, :_) == {:mock, 6}
-      assert Calculator.mult(5, :_) == {:mock, 10}
+      assert Calculator.add(4, 0) == 4 + 2
+      assert Calculator.mult(5, 0) == 5 * 2
 
       assert Calculator.mult(5, 3) == 15
     end
@@ -477,14 +484,14 @@ defmodule Mimic.Test do
 
     test "stacking expectations" do
       Calculator
-      |> expect(:add, fn _x, _y -> :first end)
-      |> expect(:add, fn _x, _y -> :second end)
+      |> expect(:add, fn _x, _y -> @expected_1 end)
+      |> expect(:add, fn _x, _y -> @expected_2 end)
 
       parent_pid = self()
 
       spawn_link(fn ->
-        assert Calculator.add(4, :_) == :first
-        assert Calculator.add(5, :_) == :second
+        assert Calculator.add(4, 0) == @expected_1
+        assert Calculator.add(5, 0) == @expected_2
 
         send(parent_pid, :ok)
       end)
@@ -494,13 +501,13 @@ defmodule Mimic.Test do
 
     test "expect multiple calls" do
       Calculator
-      |> expect(:add, 2, fn x, y -> {:add, x, y} end)
+      |> expect(:add, 2, fn x, y -> x + y + 1 end)
 
       parent_pid = self()
 
       spawn_link(fn ->
-        assert Calculator.add(4, 3) == {:add, 4, 3}
-        assert Calculator.add(5, 2) == {:add, 5, 2}
+        assert Calculator.add(4, 3) == 4 + 3 + 1
+        assert Calculator.add(5, 2) == 5 + 2 + 1
 
         send(parent_pid, :ok)
       end)
@@ -539,14 +546,14 @@ defmodule Mimic.Test do
 
     test "expecting when no expectation is defined calls original" do
       Calculator
-      |> expect(:add, fn x, _y -> {:mock, x + 2} end)
-      |> expect(:mult, fn x, _y -> {:mock, x * 2} end)
+      |> expect(:add, fn x, _y -> x + 2 end)
+      |> expect(:mult, fn x, _y -> x * 2 end)
 
       parent_pid = self()
 
       spawn_link(fn ->
-        assert Calculator.add(4, :_) == {:mock, 6}
-        assert Calculator.mult(5, :_) == {:mock, 10}
+        assert Calculator.add(4, :_) == 6
+        assert Calculator.mult(5, :_) == 10
 
         assert Calculator.mult(5, 3) == 15
 
@@ -785,15 +792,15 @@ defmodule Mimic.Test do
         end)
 
       Calculator
-      |> expect(:add, fn _, _ -> :expected end)
-      |> stub(:mult, fn _, _ -> :stubbed end)
+      |> expect(:add, fn _, _ -> @expected end)
+      |> stub(:mult, fn _, _ -> @stubbed end)
       |> allow(self(), child_pid)
 
       send(child_pid, :call_mock)
 
       assert_receive {:verify, add_result, mult_result}
-      assert add_result == :expected
-      assert mult_result == :stubbed
+      assert add_result == @expected
+      assert mult_result == @stubbed
     end
 
     test "allows different processes to share mocks from parent process when allow is defined first" do
@@ -811,14 +818,14 @@ defmodule Mimic.Test do
 
       Calculator
       |> allow(self(), child_pid)
-      |> expect(:add, fn _, _ -> :expected end)
-      |> stub(:mult, fn _, _ -> :stubbed end)
+      |> expect(:add, fn _, _ -> @expected end)
+      |> stub(:mult, fn _, _ -> @stubbed end)
 
       send(child_pid, :call_mock)
 
       assert_receive {:verify, add_result, mult_result}
-      assert add_result == :expected
-      assert mult_result == :stubbed
+      assert add_result == @expected
+      assert mult_result == @stubbed
     end
 
     test "doesn't raise if no expectation defined" do
@@ -832,15 +839,15 @@ defmodule Mimic.Test do
       parent_pid = self()
 
       Calculator
-      |> expect(:add, fn _, _ -> :expected end)
-      |> stub(:mult, fn _, _ -> :stubbed end)
+      |> expect(:add, fn _, _ -> @expected end)
+      |> stub(:mult, fn _, _ -> @stubbed end)
 
       spawn_link(fn ->
         Calculator
         |> allow(parent_pid, self())
 
-        assert Calculator.add(1, 1) == :expected
-        assert Calculator.mult(1, 1) == :stubbed
+        assert Calculator.add(1, 1) == @expected
+        assert Calculator.mult(1, 1) == @stubbed
         send(parent_pid, :ok)
       end)
 
@@ -872,16 +879,16 @@ defmodule Mimic.Test do
         end)
 
       Calculator
-      |> expect(:add, fn _, _ -> :expected end)
-      |> stub(:mult, fn _, _ -> :stubbed end)
+      |> expect(:add, fn _, _ -> @expected end)
+      |> stub(:mult, fn _, _ -> @stubbed end)
       |> allow(self(), transitive_pid)
 
       send(transitive_pid, :allow_mock)
 
       receive do
         {:verify, add_result, mult_result} ->
-          assert add_result == :expected
-          assert mult_result == :stubbed
+          assert add_result == @expected
+          assert mult_result == @stubbed
           verify!()
       after
         1000 -> verify!()
@@ -893,8 +900,8 @@ defmodule Mimic.Test do
 
       spawn_link(fn ->
         Calculator
-        |> expect(:add, fn _, _ -> :expected end)
-        |> stub(:mult, fn _, _ -> :stubbed end)
+        |> expect(:add, fn _, _ -> @expected end)
+        |> stub(:mult, fn _, _ -> @stubbed end)
         |> allow(self(), parent_pid)
 
         send(parent_pid, :ok)
@@ -968,12 +975,12 @@ defmodule Mimic.Test do
       Calculator
       |> stub(:add, fn x, y ->
         send(parent_pid, {:add, x, y})
-        :stubbed
+        @stubbed
       end)
 
       Mimic.copy(Calculator)
 
-      assert Calculator.add(1, 2) == :stubbed
+      assert Calculator.add(1, 2) == @stubbed
       assert_receive {:add, 1, 2}
     end
   end
@@ -1021,7 +1028,7 @@ defmodule Mimic.Test do
 
     test "copies struct fields with default values" do
       Structs
-      |> stub(:foo, fn -> :stubbed end)
+      |> stub(:foo, fn -> @stubbed end)
 
       assert Structs.__struct__() == %Structs{
                foo: nil,
@@ -1033,7 +1040,7 @@ defmodule Mimic.Test do
 
     test "copies struct fields" do
       StructNoEnforceKeys
-      |> stub(:bar, fn -> :stubbed end)
+      |> stub(:bar, fn -> @stubbed end)
 
       assert StructNoEnforceKeys.__info__(:struct) == [
                %{field: :foo, default: nil},
@@ -1043,7 +1050,7 @@ defmodule Mimic.Test do
 
     test "protocol still works" do
       Structs
-      |> stub(:foo, fn -> :stubbed end)
+      |> stub(:foo, fn -> @stubbed end)
 
       s = %Structs{foo: "abc", bar: "def"}
 
