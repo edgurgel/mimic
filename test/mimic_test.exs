@@ -8,6 +8,7 @@ defmodule Mimic.Test do
 
   @stubbed 400
   @private_stub 500
+  @elixir_version System.version() |> Float.parse() |> elem(0)
 
   describe "no stub or expects private mode" do
     setup :set_mimic_private
@@ -1038,14 +1039,26 @@ defmodule Mimic.Test do
              }
     end
 
-    test "copies struct fields" do
-      StructNoEnforceKeys
-      |> stub(:bar, fn -> @stubbed end)
+    if @elixir_version >= 1.18 do
+      test "copies struct fields" do
+        StructNoEnforceKeys
+        |> stub(:bar, fn -> @stubbed end)
 
-      assert StructNoEnforceKeys.__info__(:struct) == [
-               %{field: :foo, default: nil},
-               %{field: :bar, default: nil}
-             ]
+        assert StructNoEnforceKeys.__info__(:struct) == [
+                 %{field: :foo, default: nil},
+                 %{field: :bar, default: nil}
+               ]
+      end
+    else
+      test "copies struct fields" do
+        StructNoEnforceKeys
+        |> stub(:bar, fn -> @stubbed end)
+
+        assert StructNoEnforceKeys.__info__(:struct) == [
+                 %{field: :foo, required: false},
+                 %{field: :bar, required: false}
+               ]
+      end
     end
 
     test "protocol still works" do
