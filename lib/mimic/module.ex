@@ -1,5 +1,7 @@
 defmodule Mimic.Module do
   alias Mimic.{Cover, Server}
+
+  @elixir_version System.version() |> Float.parse() |> elem(0)
   @moduledoc false
 
   @spec original(module) :: module
@@ -121,18 +123,47 @@ defmodule Mimic.Module do
     module
   end
 
-  defp generate_mimic_struct(module) do
-    if function_exported?(module, :__info__, 1) && module.__info__(:struct) != nil do
-      struct_info = module.__info__(:struct)
+  if @elixir_version >= 1.18 do
+    defp generate_mimic_struct(module) do
+      if function_exported?(module, :__info__, 1) && module.__info__(:struct) != nil do
+        struct_info = module.__info__(:struct)
 
-      struct_template = Map.from_struct(module.__struct__())
+        struct_template = Map.from_struct(module.__struct__())
 
-      struct_params =
-        for %{field: field} <- struct_info,
-            do: {field, Macro.escape(struct_template[field])}
+        struct_params =
+          for %{field: field} <- struct_info,
+              do: {field, Macro.escape(struct_template[field])}
 
-      quote do
-        defstruct unquote(struct_params)
+        quote do
+          defstruct unquote(struct_params)
+        end
+      end
+    end
+  else
+    defp generate_mimic_struct(module) do
+      if function_exported?(module, :__info__, 1) && module.__info__(:struct) != nil do
+        struct_info =
+          module.__info__(:struct)
+          |> Enum.split_with(& &1.required)
+          |> Tuple.to_list()
+          |> List.flatten()
+
+        required_fields = for %{field: field, required: true} <- struct_info, do: field
+        struct_template = Map.from_struct(module.__struct__())
+
+        struct_params =
+          for %{field: field, required: required} <- struct_info do
+            if required do
+              field
+            else
+              {field, Macro.escape(struct_template[field])}
+            end
+          end
+
+        quote do
+          @enforce_keys unquote(required_fields)
+          defstruct unquote(struct_params)
+        end
       end
     end
   end
