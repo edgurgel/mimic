@@ -4,15 +4,17 @@ defmodule Mimic.DSLTest do
 
   setup :set_mimic_private
 
+  @stub 10
+
   test "basic example" do
-    stub(Calculator.add(_x, _y), do: :stub)
+    stub(Calculator.add(_x, _y), do: @stub)
     expect Calculator.add(x, y), do: x + y
     expect Calculator.mult(x, y), do: x * y
 
     assert Calculator.add(2, 3) == 5
     assert Calculator.mult(2, 3) == 6
 
-    assert Calculator.add(2, 3) == :stub
+    assert Calculator.add(2, 3) == @stub
   end
 
   test "guards on stub" do

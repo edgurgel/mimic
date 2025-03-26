@@ -1,5 +1,7 @@
 defmodule Mimic.Module do
   alias Mimic.{Cover, Server}
+
+  @elixir_version System.version() |> Float.parse() |> elem(0)
   @moduledoc false
 
   @spec original(module) :: module
@@ -15,8 +17,8 @@ defmodule Mimic.Module do
     :ok
   end
 
-  @spec replace!(module) :: :ok | {:cover.file(), binary}
-  def replace!(module) do
+  @spec replace!(module, keyword) :: :ok | {:cover.file(), binary}
+  def replace!(module, opts) do
     backup_module = original(module)
 
     result =
@@ -34,7 +36,7 @@ defmodule Mimic.Module do
 
     rename_module(module, backup_module)
     Code.compiler_options(ignore_module_conflict: true)
-    create_mock(module)
+    create_mock(module, Map.new(opts))
     Code.compiler_options(ignore_module_conflict: false)
 
     result
@@ -111,8 +113,8 @@ defmodule Mimic.Module do
 
   defp rename_attribute([h | t], new_name), do: [h | rename_attribute(t, new_name)]
 
-  defp create_mock(module) do
-    mimic_info = module_mimic_info()
+  defp create_mock(module, opts) do
+    mimic_info = module_mimic_info(opts)
     mimic_behaviours = generate_mimic_behaviours(module)
     mimic_functions = generate_mimic_functions(module)
     mimic_struct = generate_mimic_struct(module)
@@ -121,19 +123,53 @@ defmodule Mimic.Module do
     module
   end
 
-  defp generate_mimic_struct(module) do
-    if function_exported?(module, :__info__, 1) && module.__info__(:struct) != nil do
-      required_fields = for %{field: field, required: true} <- module.__info__(:struct), do: field
+  if @elixir_version >= 1.18 do
+    defp generate_mimic_struct(module) do
+      if function_exported?(module, :__info__, 1) && module.__info__(:struct) != nil do
+        struct_info = module.__info__(:struct)
 
-      quote do
-        @enforce_keys unquote(required_fields)
-        defstruct unquote(for %{field: field} <- module.__info__(:struct), do: field)
+        struct_template = Map.from_struct(module.__struct__())
+
+        struct_params =
+          for %{field: field} <- struct_info,
+              do: {field, Macro.escape(struct_template[field])}
+
+        quote do
+          defstruct unquote(struct_params)
+        end
+      end
+    end
+  else
+    defp generate_mimic_struct(module) do
+      if function_exported?(module, :__info__, 1) && module.__info__(:struct) != nil do
+        struct_info =
+          module.__info__(:struct)
+          |> Enum.split_with(& &1.required)
+          |> Tuple.to_list()
+          |> List.flatten()
+
+        required_fields = for %{field: field, required: true} <- struct_info, do: field
+        struct_template = Map.from_struct(module.__struct__())
+
+        struct_params =
+          for %{field: field, required: required} <- struct_info do
+            if required do
+              field
+            else
+              {field, Macro.escape(struct_template[field])}
+            end
+          end
+
+        quote do
+          @enforce_keys unquote(required_fields)
+          defstruct unquote(struct_params)
+        end
       end
     end
   end
 
-  defp module_mimic_info do
-    quote do: def(__mimic_info__, do: :ok)
+  defp module_mimic_info(opts) do
+    quote do: def(__mimic_info__, do: {:ok, unquote(Macro.escape(opts))})
   end
 
   defp generate_mimic_functions(module) do
@@ -141,11 +177,7 @@ defmodule Mimic.Module do
 
     for {fn_name, arity} <- module.module_info(:exports),
         {fn_name, arity} not in internal_functions do
-      args =
-        0..arity
-        |> Enum.to_list()
-        |> tl()
-        |> Enum.map(&Macro.var(String.to_atom("arg_#{&1}"), Elixir))
+      args = Macro.generate_arguments(arity, module)
 
       quote do
         def unquote(fn_name)(unquote_splicing(args)) do

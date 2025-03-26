@@ -352,13 +352,18 @@ defmodule Mimic do
   ## Arguments:
 
     * `module` - the name of the module to copy.
+    * `opts` - Extra options
 
+  ## Options:
+
+    * `type_check` - Must be a boolean defaulting to `false`. If `true` the arguments and return value
+      are validated against the module typespecs or the callback typespecs in case of a behaviour implementation.
   """
-  @spec copy(module()) :: :ok | no_return
-  def copy(module) do
+  @spec copy(module(), keyword) :: :ok | no_return
+  def copy(module, opts \\ []) do
     with :ok <- ensure_module_not_copied(module),
          {:module, module} <- Code.ensure_compiled(module),
-         :ok <- Mimic.Server.mark_to_copy(module) do
+         :ok <- Mimic.Server.mark_to_copy(module, opts) do
       if ExUnit.configuration()[:repeat_until_failure] do
         ExUnit.after_suite(fn _ -> Mimic.Server.soft_reset(module) end)
       else

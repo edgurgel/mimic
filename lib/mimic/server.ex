@@ -12,7 +12,8 @@ defmodule Mimic.Server do
               expectations: %{},
               modules_beam: %{},
               modules_to_be_copied: MapSet.new(),
-              reset_tasks: %{}
+              reset_tasks: %{},
+              modules_opts: %{}
   end
 
   defmodule Expectation do
@@ -95,9 +96,9 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:soft_reset, module}, @long_timeout)
   end
 
-  @spec mark_to_copy(module) :: :ok | {:error, {:module_already_copied, module}}
-  def mark_to_copy(module) do
-    GenServer.call(__MODULE__, {:mark_to_copy, module}, @long_timeout)
+  @spec mark_to_copy(module, keyword) :: :ok | {:error, {:module_already_copied, module}}
+  def mark_to_copy(module, opts) do
+    GenServer.call(__MODULE__, {:mark_to_copy, module, opts}, @long_timeout)
   end
 
   @spec marked_to_copy?(module) :: boolean
@@ -264,7 +265,8 @@ defmodule Mimic.Server do
 
   def handle_call({:stub, module, fn_name, func, arity, owner}, _from, state) do
     with {:ok, state} <- ensure_module_copied(module, state),
-         true <- valid_mode?(state, owner) do
+         true <- valid_mode?(state, owner),
+         func <- maybe_typecheck_func(module, fn_name, func) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
       :ets.insert_new(__MODULE__, {{owner, module}, owner})
@@ -341,6 +343,7 @@ defmodule Mimic.Server do
         will_be_mocked_functions
         |> Enum.reduce(state.stubs, fn {fn_name, arity}, stubs ->
           func = anonymize_module_function(mocking_module, fn_name, arity)
+          func = maybe_typecheck_func(mocked_module, fn_name, func)
           put_in(stubs, [Access.key(owner, %{}), {mocked_module, fn_name, arity}], func)
         end)
 
@@ -363,7 +366,8 @@ defmodule Mimic.Server do
 
   def handle_call({:expect, {module, fn_name, func, arity}, num_calls, owner}, _from, state) do
     with {:ok, state} <- ensure_module_copied(module, state),
-         true <- valid_mode?(state, owner) do
+         true <- valid_mode?(state, owner),
+         func <- maybe_typecheck_func(module, fn_name, func) do
       monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
       :ets.insert_new(__MODULE__, {{owner, module}, owner})
@@ -403,6 +407,9 @@ defmodule Mimic.Server do
     case :ets.lookup(__MODULE__, {owner_pid, module}) do
       [{{^owner_pid, ^module}, actual_owner_pid}] ->
         :ets.insert(__MODULE__, {{allowed_pid, module}, actual_owner_pid})
+
+      [] ->
+        :ets.insert(__MODULE__, {{allowed_pid, module}, owner_pid})
     end
 
     {:reply, {:ok, module}, state}
@@ -472,7 +479,7 @@ defmodule Mimic.Server do
     {:reply, marked_to_copy?(module, state), state}
   end
 
-  def handle_call({:mark_to_copy, module}, _from, state) do
+  def handle_call({:mark_to_copy, module, opts}, _from, state) do
     if marked_to_copy?(module, state) do
       {:reply, {:error, {:module_already_copied, module}}, state}
     else
@@ -480,7 +487,11 @@ defmodule Mimic.Server do
       # Otherwise just store that the module that will be copied
       # and ensure_module_copied/2 will copy it when
       # expect, stub, reject is called
-      state = %{state | modules_to_be_copied: MapSet.put(state.modules_to_be_copied, module)}
+      state = %{
+        state
+        | modules_to_be_copied: MapSet.put(state.modules_to_be_copied, module),
+          modules_opts: Map.put(state.modules_opts, module, opts)
+      }
 
       state =
         if Cover.enabled_for?(module) do
@@ -491,6 +502,16 @@ defmodule Mimic.Server do
         end
 
       {:reply, :ok, state}
+    end
+  end
+
+  defp maybe_typecheck_func(module, fn_name, func) do
+    case module.__mimic_info__() do
+      {:ok, %{type_check: true}} ->
+        Mimic.TypeCheck.wrap(module, fn_name, func)
+
+      _ ->
+        func
     end
   end
 
@@ -511,7 +532,7 @@ defmodule Mimic.Server do
         {:ok, state}
 
       MapSet.member?(state.modules_to_be_copied, module) ->
-        case Mimic.Module.replace!(module) do
+        case Mimic.Module.replace!(module, state.modules_opts[module]) do
           {beam_file, coverdata_path} ->
             modules_beam = Map.put(state.modules_beam, module, {beam_file, coverdata_path})
             {:ok, %{state | modules_beam: modules_beam}}
