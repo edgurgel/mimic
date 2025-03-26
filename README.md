@@ -7,6 +7,7 @@
 [![Total Download](https://img.shields.io/hexpm/dt/mimic.svg)](https://hex.pm/packages/mimic)
 [![License](https://img.shields.io/hexpm/l/mimic.svg)](https://github.com/edgurgel/mimic/blob/master/LICENSE)
 [![Last Updated](https://img.shields.io/github/last-commit/edgurgel/mimic.svg)](https://github.com/edgurgel/mimic/commits/master)
+[![libs.tech recommends](https://libs.tech/project/73606875/badge.svg)](https://libs.tech/project/73606875/mimic)
 
 A sane way of using mocks in Elixir. It borrows a lot from both Meck & Mox! Thanks [@eproxus](https://twitter.com/eproxus) & [@josevalim](https://twitter.com/josevalim).
 
