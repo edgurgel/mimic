@@ -30,27 +30,27 @@ defmodule Mimic.Test do
 
   describe "default mode" do
     test "private mode is the default mode" do
-      parent_pid = self()
-
-      spawn_link(fn ->
-        Mimic.set_mimic_global()
-        stub(Calculator, :add, fn _, _ -> @stubbed end)
-
-        child_pid = self()
-
+      pid =
         spawn_link(fn ->
-          assert Calculator.add(3, 7) == @stubbed
+          Mimic.set_mimic_global()
+          stub(Calculator, :add, fn _, _ -> @stubbed end)
 
-          send(child_pid, :ok_child)
+          pid =
+            spawn_link(fn ->
+              assert Calculator.add(3, 7) == @stubbed
+            end)
+
+          Process.monitor(pid)
+          assert_receive {:DOWN, _, _, ^pid, _}
+          refute Process.alive?(pid)
         end)
 
-        assert_receive :ok_child
-        send(parent_pid, :ok)
-      end)
+      Process.monitor(pid)
+      assert_receive {:DOWN, _, _, ^pid, _}
+      refute Process.alive?(pid)
 
-      assert_receive :ok
+      :timer.sleep(1)
 
-      :timer.sleep(500)
       stub(Calculator, :add, fn _, _ -> @private_stub end)
       assert Calculator.add(3, 7) == @private_stub
     end
@@ -899,16 +899,19 @@ defmodule Mimic.Test do
     test "allowances are reclaimed if the owner process dies" do
       parent_pid = self()
 
-      spawn_link(fn ->
-        Calculator
-        |> expect(:add, fn _, _ -> @expected end)
-        |> stub(:mult, fn _, _ -> @stubbed end)
-        |> allow(self(), parent_pid)
+      pid =
+        spawn_link(fn ->
+          Calculator
+          |> expect(:add, fn _, _ -> @expected end)
+          |> stub(:mult, fn _, _ -> @stubbed end)
+          |> allow(self(), parent_pid)
+        end)
 
-        send(parent_pid, :ok)
-      end)
+      Process.monitor(pid)
+      assert_receive {:DOWN, _, _, ^pid, _}
+      refute Process.alive?(pid)
 
-      assert_receive :ok
+      :timer.sleep(1)
 
       assert Calculator.add(1, 3) == 4
 

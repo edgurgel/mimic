@@ -1,8 +1,10 @@
 defmodule MimicTypeCheckTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   use Mimic
 
   alias Typecheck.Calculator
+
+  setup :set_mimic_private
 
   describe "stub/3" do
     test "does not raise with correct type" do
