@@ -1,6 +1,8 @@
 defmodule Mimic.DSLTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   use Mimic.DSL
+
+  setup :set_mimic_private
 
   @stub 10
 
