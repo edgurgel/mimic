@@ -22,7 +22,7 @@ defmodule Mimic.TestCover do
       end)
 
     expected =
-      {{Calculator, :add, 2}, 5} in results &&
+      {{Calculator, :add, 2}, 9} in results &&
         {{Calculator, :mult, 2}, 5} in results &&
         {{NoStubs, :add, 2}, 2} in results && !mimic_module_cover
 
