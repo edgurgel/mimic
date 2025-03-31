@@ -364,7 +364,7 @@ defmodule Mimic do
     with :ok <- ensure_module_not_copied(module),
          {:module, module} <- Code.ensure_compiled(module),
          :ok <- Mimic.Server.mark_to_copy(module, opts) do
-      if ExUnit.configuration()[:repeat_until_failure] do
+      if repeat_until_failure?() do
         ExUnit.after_suite(fn _ -> Mimic.Server.soft_reset(module) end)
       else
         ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
@@ -503,6 +503,14 @@ defmodule Mimic do
     case Server.marked_to_copy?(module) do
       false -> :ok
       true -> {:error, {:module_already_copied, module}}
+    end
+  end
+
+  defp repeat_until_failure? do
+    case ExUnit.configuration()[:repeat_until_failure] do
+      0 -> false
+      repeat when is_integer(repeat) -> true
+      _ -> false
     end
   end
 
