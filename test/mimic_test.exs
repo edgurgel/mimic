@@ -1073,4 +1073,105 @@ defmodule Mimic.Test do
       assert to_string(s) == "{abc} - {def}"
     end
   end
+
+  describe "calls/1" do
+    setup :set_mimic_private
+
+    test "returns calls for stubbed functions" do
+      stub(Calculator, :add, fn x, y -> x + y end)
+
+      Calculator.add(1, 2)
+      Calculator.add(3, 4)
+
+      assert Mimic.calls(&Calculator.add/2) == [[3, 4], [1, 2]]
+    end
+  end
+
+  describe "calls/3 private mode" do
+    setup :set_mimic_private
+
+    test "returns calls for stubbed functions" do
+      stub(Calculator, :add, fn x, y -> x + y end)
+
+      Calculator.add(1, 2)
+      Calculator.add(3, 4)
+
+      assert Mimic.calls(Calculator, :add, 2) == [[3, 4], [1, 2]]
+    end
+
+    test "returns calls for expected functions" do
+      expect(Calculator, :add, 2, fn x, y -> x + y end)
+
+      Calculator.add(1, 2)
+      Calculator.add(3, 4)
+
+      assert Mimic.calls(Calculator, :add, 2) == [[3, 4], [1, 2]]
+    end
+
+    test "raises when mock is not defined" do
+      assert_raise ArgumentError, fn -> Mimic.calls(Date, :add, 2) end
+    end
+
+    test "raises for non-existent functions" do
+      assert_raise ArgumentError,
+                   "Function invalid/2 not defined for Calculator",
+                   fn -> Mimic.calls(Calculator, :invalid, 2) end
+    end
+
+    test "raises for non-existent modules" do
+      assert_raise ArgumentError, "Function add/2 not defined for NonExistentModule", fn ->
+        Mimic.calls(NonExistentModule, :add, 2)
+      end
+    end
+  end
+
+  describe "calls/3 global mode" do
+    setup :set_mimic_global
+
+    test "returns calls for stubbed functions" do
+      stub(Calculator, :add, fn x, y -> x + y end)
+
+      parent_pid = self()
+
+      spawn_link(fn ->
+        Calculator.add(1, 2)
+        Calculator.add(3, 4)
+        send(parent_pid, :ok)
+      end)
+
+      assert_receive :ok
+      assert Mimic.calls(Calculator, :add, 2) == [[3, 4], [1, 2]]
+    end
+
+    test "returns calls for expected functions" do
+      expect(Calculator, :add, 2, fn x, y -> x + y end)
+
+      parent_pid = self()
+
+      spawn_link(fn ->
+        Calculator.add(1, 2)
+        Calculator.add(3, 4)
+        send(parent_pid, :ok)
+      end)
+
+      assert_receive :ok
+      assert Mimic.calls(Calculator, :add, 2) == [[3, 4], [1, 2]]
+    end
+
+    test "raises when mock is not defined" do
+      assert_raise ArgumentError, fn -> Mimic.calls(Date, :add, 2) end
+    end
+
+    test "raises for non-existent functions" do
+      assert_raise ArgumentError,
+                   "Function invalid/2 not defined for Calculator",
+                   fn -> Mimic.calls(Calculator, :invalid, 2) end
+    end
+
+    test "raises for non-existent modules" do
+      assert_raise ArgumentError, "Function add/2 not defined for NonExistentModule", fn ->
+        Mimic.calls(NonExistentModule, :add, 2)
+      end
+    end
+  end
 end
