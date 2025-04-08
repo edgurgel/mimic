@@ -13,7 +13,8 @@ defmodule Mimic.Server do
               modules_beam: %{},
               modules_to_be_copied: MapSet.new(),
               reset_tasks: %{},
-              modules_opts: %{}
+              modules_opts: %{},
+              call_history: %{}
   end
 
   defmodule Expectation do
@@ -106,6 +107,11 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:marked_to_copy?, module}, @long_timeout)
   end
 
+  @spec get_calls(module, atom, arity) :: {:ok, list(list(term))} | {:error, :not_found}
+  def get_calls(module, fn_name, arity) do
+    GenServer.call(__MODULE__, {:get_calls, {module, fn_name, arity}, self()})
+  end
+
   def apply(module, fn_name, args) do
     arity = Enum.count(args)
     original_module = Mimic.Module.original(module)
@@ -126,7 +132,7 @@ defmodule Mimic.Server do
   end
 
   defp do_apply(owner_pid, module, fn_name, arity, args) do
-    case GenServer.call(__MODULE__, {:apply, owner_pid, module, fn_name, arity}, :infinity) do
+    case GenServer.call(__MODULE__, {:apply, owner_pid, module, fn_name, arity, args}, :infinity) do
       {:ok, func} ->
         Kernel.apply(func, args)
 
@@ -231,7 +237,7 @@ defmodule Mimic.Server do
     end
   end
 
-  def handle_call({:apply, owner_pid, module, fn_name, arity}, _from, state) do
+  def handle_call({:apply, owner_pid, module, fn_name, arity, args}, _from, state) do
     caller =
       if state.mode == :private do
         owner_pid
@@ -246,6 +252,23 @@ defmodule Mimic.Server do
             expectations =
               put_in(state.expectations, [caller, {module, fn_name, arity}], new_expectations)
 
+            # Track call history
+            call_history =
+              get_in(state.call_history, [Access.key(caller, %{}), {module, fn_name, arity}]) ||
+                []
+
+            state = %{
+              state
+              | call_history:
+                  put_in(
+                    state.call_history,
+                    [Access.key(caller, %{}), {module, fn_name, arity}],
+                    [
+                      args | call_history
+                    ]
+                  )
+            }
+
             {:reply, {:ok, func}, %{state | expectations: expectations}}
 
           {:unexpected, num_calls, num_applied_calls} ->
@@ -258,6 +281,23 @@ defmodule Mimic.Server do
             {:reply, :original, state}
 
           {:ok, func} ->
+            # Track call history for stubs too
+            call_history =
+              get_in(state.call_history, [Access.key(caller, %{}), {module, fn_name, arity}]) ||
+                []
+
+            state = %{
+              state
+              | call_history:
+                  put_in(
+                    state.call_history,
+                    [Access.key(caller, %{}), {module, fn_name, arity}],
+                    [
+                      args | call_history
+                    ]
+                  )
+            }
+
             {:reply, {:ok, func}, state}
         end
     end
@@ -502,6 +542,29 @@ defmodule Mimic.Server do
         end
 
       {:reply, :ok, state}
+    end
+  end
+
+  def handle_call({:get_calls, {module, fn_name, arity}, owner_pid}, _from, state) do
+    caller_pids = [self() | Process.get(:"$callers", [])]
+
+    caller_pid =
+      case allowed_pid(caller_pids, module) do
+        {:ok, owner_pid} -> owner_pid
+        _ -> owner_pid
+      end
+
+    with {:ok, state} <- ensure_module_copied(module, state) do
+      case get_in(state.call_history, [Access.key(caller_pid, %{}), {module, fn_name, arity}]) do
+        calls when is_list(calls) -> {:reply, {:ok, calls}, state}
+        _ -> {:reply, {:error, :not_mocked}, state}
+      end
+    else
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+
+      false ->
+        {:reply, {:error, :not_global_owner}, state}
     end
   end
 
