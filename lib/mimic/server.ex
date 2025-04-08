@@ -237,6 +237,26 @@ defmodule Mimic.Server do
     end
   end
 
+  defp get_call_history(state, caller, module, fn_name, arity) do
+    get_in(state.call_history, [Access.key(caller, %{}), {module, fn_name, arity}])
+  end
+
+  defp put_call_history(state, caller, module, fn_name, arity, args) do
+    call_history = get_call_history(state, caller, module, fn_name, arity) || []
+
+    %{
+      state
+      | call_history:
+          put_in(
+            state.call_history,
+            [Access.key(caller, %{}), {module, fn_name, arity}],
+            [
+              args | call_history
+            ]
+          )
+    }
+  end
+
   def handle_call({:apply, owner_pid, module, fn_name, arity, args}, _from, state) do
     caller =
       if state.mode == :private do
@@ -253,21 +273,7 @@ defmodule Mimic.Server do
               put_in(state.expectations, [caller, {module, fn_name, arity}], new_expectations)
 
             # Track call history
-            call_history =
-              get_in(state.call_history, [Access.key(caller, %{}), {module, fn_name, arity}]) ||
-                []
-
-            state = %{
-              state
-              | call_history:
-                  put_in(
-                    state.call_history,
-                    [Access.key(caller, %{}), {module, fn_name, arity}],
-                    [
-                      args | call_history
-                    ]
-                  )
-            }
+            state = put_call_history(state, caller, module, fn_name, arity, args)
 
             {:reply, {:ok, func}, %{state | expectations: expectations}}
 
@@ -282,21 +288,7 @@ defmodule Mimic.Server do
 
           {:ok, func} ->
             # Track call history for stubs too
-            call_history =
-              get_in(state.call_history, [Access.key(caller, %{}), {module, fn_name, arity}]) ||
-                []
-
-            state = %{
-              state
-              | call_history:
-                  put_in(
-                    state.call_history,
-                    [Access.key(caller, %{}), {module, fn_name, arity}],
-                    [
-                      args | call_history
-                    ]
-                  )
-            }
+            state = put_call_history(state, caller, module, fn_name, arity, args)
 
             {:reply, {:ok, func}, state}
         end
@@ -554,17 +546,15 @@ defmodule Mimic.Server do
         _ -> owner_pid
       end
 
-    with {:ok, state} <- ensure_module_copied(module, state) do
-      case get_in(state.call_history, [Access.key(caller_pid, %{}), {module, fn_name, arity}]) do
-        calls when is_list(calls) -> {:reply, {:ok, calls}, state}
-        _ -> {:reply, {:error, :not_mocked}, state}
-      end
-    else
+    case ensure_module_copied(module, state) do
+      {:ok, state} ->
+        case get_in(state.call_history, [Access.key(caller_pid, %{}), {module, fn_name, arity}]) do
+          calls when is_list(calls) -> {:reply, {:ok, calls}, state}
+          _ -> {:reply, {:error, :not_mocked}, state}
+        end
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
-
-      false ->
-        {:reply, {:error, :not_global_owner}, state}
     end
   end
 
