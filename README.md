@@ -159,10 +159,6 @@ defmodule Calculator do
   def mult(x, y) do
     x * y
   end
-
-  def negation(x) do
-    mult(x, -1)
-  end
 end
 
 Calculator
@@ -173,6 +169,25 @@ Calculator
 9 = Calculator.mult(3, 3)
 
 [[3, 3]] = calls(Calculator, :mult, 2)
+```
+
+`calls/1` works the same way, but with a capture of the function:
+
+```elixir
+defmodule Calculator do
+  def mult(x, y) do
+    x * y
+  end
+end
+
+Calculator
+|> expect(:mult, fn x, y -> x + y end)
+
+[] = calls(&Calculator.mult/2)
+
+9 = Calculator.mult(3, 3)
+
+[[3, 3]] = calls(&Calculator.mult/2)
 ```
 
 ## Private and Global mode
