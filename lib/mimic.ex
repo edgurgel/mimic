@@ -302,6 +302,36 @@ defmodule Mimic do
   end
 
   @doc """
+  Define a stub which must not be called for any function in the module.
+
+  This function allows you to define stubs for all functions in a module which must not be called during the
+  course of this test. If any of them are called, then the verification step will raise.
+
+  ## Arguments:
+
+    * `module` - the name of the module for which we're rejecting all functions.
+
+  ## Raises:
+
+    * If any function in the module is called by the stubbing process while calling `verify!/1`.
+
+  ## Example:
+
+      iex> Mimic.reject_any(Calculator)
+      Calculator
+
+  """
+  @doc since: "1.12.0"
+  @spec reject_any(module) :: module
+  def reject_any(module) when is_atom(module) do
+    for {function, arity} <- module.__info__(:functions) do
+      reject(module, function, arity)
+    end
+
+    module
+  end
+
+  @doc """
   Allow other processes to share expectations and stubs defined by another
   process.
 

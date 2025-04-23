@@ -626,6 +626,34 @@ defmodule Mimic.Test do
     end
   end
 
+  describe "reject_any/1 private mode" do
+    setup :set_mimic_private
+
+    test "expect no call to function" do
+      reject_any(Calculator)
+
+      message =
+        ~r"expected Calculator.add/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
+
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.add(3, 7) end
+
+      message =
+        ~r"expected Calculator.mult/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
+
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(3, 7) end
+    end
+
+    test "expectation being fulfilled" do
+      reject_any(Calculator)
+
+      verify!(self())
+    end
+
+    test "expecting when mock is not defined" do
+      assert_raise ArgumentError, fn -> reject_any(Date) end
+    end
+  end
+
   describe "reject/1 global mode" do
     setup :set_mimic_global
 
@@ -658,6 +686,40 @@ defmodule Mimic.Test do
 
     test "expecting when mock is not defined" do
       assert_raise ArgumentError, fn -> reject(&Date.add/2) end
+    end
+  end
+
+  describe "reject_any/1 global mode" do
+    setup :set_mimic_global
+
+    test "basic expectation" do
+      reject_any(Calculator)
+
+      parent_pid = self()
+
+      spawn_link(fn ->
+        assert_raise Mimic.UnexpectedCallError, fn -> Calculator.add(4, :_) end
+        assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(4, :_) end
+
+        send(parent_pid, :ok)
+      end)
+
+      assert_receive :ok
+    end
+
+    test "raises if a different process used reject" do
+      Task.async(fn ->
+        assert_raise ArgumentError,
+                     "Reject cannot be called by the current process. Only the global owner is allowed.",
+                     fn ->
+                       reject_any(Calculator)
+                     end
+      end)
+      |> Task.await()
+    end
+
+    test "expecting when mock is not defined" do
+      assert_raise ArgumentError, fn -> reject_any(Date) end
     end
   end
 
