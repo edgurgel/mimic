@@ -150,6 +150,49 @@ reject(&Calculator.add/2)
 assert_raise Mimic.UnexpectedCallError, fn -> Calculator.add(4, 2) end
 ```
 
+### Calls
+
+`calls/3` returns a list of args for each call to a stubbed Mimic function.
+
+```elixir
+defmodule Calculator do
+  def mult(x, y) do
+    x * y
+  end
+end
+
+Calculator
+|> expect(:mult, fn x, y -> x + y end)
+
+[] = calls(Calculator, :mult, 2)
+
+9 = Calculator.mult(3, 3)
+
+[[3, 3]] = calls(Calculator, :mult, 2)
+```
+
+`calls/1` works the same way, but with a capture of the function:
+
+```elixir
+defmodule Calculator do
+  def mult(x, y) do
+    x * y
+  end
+end
+
+Calculator
+|> expect(:mult, fn x, y -> x + y end)
+
+[] = calls(&Calculator.mult/2)
+
+9 = Calculator.mult(3, 3)
+
+[[3, 3]] = calls(&Calculator.mult/2)
+```
+
+When `calls` is called they are popped out of the list of calls. Next time `calls` is used it will only
+return new calls since the last time that `calls` was used.
+
 ## Private and Global mode
 
 The default mode is private which means that only the process

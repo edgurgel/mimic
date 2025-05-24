@@ -499,6 +499,85 @@ defmodule Mimic do
     Server.get_mode()
   end
 
+  @doc """
+  Get the list of calls made to a mocked/stubbed function.
+
+  This function returns a list of all arguments passed to the function during each call.
+  If the function has not been mocked/stubbed or has not been called, it will raise an error.
+
+  ## Arguments:
+
+    * `function` - A capture of the function to get the calls for.
+
+  ## Returns:
+
+    * A list of lists, where each inner list contains the arguments from one call.
+
+  ## Raises:
+
+    * If the function has not been mocked/stubbed.
+    * If the function does not exist in the module.
+
+  ## Example:
+
+      iex> Calculator.add(1, 2)
+      3
+      iex> Mimic.calls(&Calculator.add/2)
+      [[1, 2]]
+
+  """
+  @spec calls(function) :: [[any]] | {:error, :atom}
+  def calls(function) do
+    fun_info = Function.info(function)
+    module = fun_info[:module]
+    fn_name = fun_info[:name]
+    arity = fun_info[:arity]
+
+    calls(module, fn_name, arity)
+  end
+
+  @doc """
+  Get the list of calls made to a mocked/stubbed function.
+
+  This function returns a list of all arguments passed to the function during each call.
+  If the function has not been mocked/stubbed or has not been called, it will raise an error.
+
+  ## Arguments:
+
+    * `module` - the name of the module containing the function.
+    * `function_name` - the name of the function.
+    * `arity` - the arity of the function.
+
+  ## Returns:
+
+    * A list of lists, where each inner list contains the arguments from one call.
+
+  ## Raises:
+
+    * If the function has not been mocked/stubbed.
+    * If the function does not exist in the module.
+
+  ## Example:
+
+      iex> Calculator.add(1, 2)
+      3
+      iex> Mimic.calls(Calculator, :add, 2)
+      [[1, 2]]
+
+  """
+  @spec calls(module, atom, non_neg_integer) :: [[any]] | {:error, :atom}
+  def calls(module, function_name, arity) do
+    raise_if_not_exported_function!(module, function_name, arity)
+
+    result =
+      Server.get_calls(module, function_name, arity)
+      |> validate_server_response(:calls)
+
+    with {:ok, calls} <- result do
+      calls
+    end
+  end
+
   defp ensure_module_not_copied(module) do
     case Server.marked_to_copy?(module) do
       false -> :ok
