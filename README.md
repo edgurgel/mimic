@@ -190,6 +190,9 @@ Calculator
 [[3, 3]] = calls(&Calculator.mult/2)
 ```
 
+When `calls` is called they are popped out of the list of calls. Next time `calls` is used it will only
+return new calls since the last time that `calls` was used.
+
 ## Private and Global mode
 
 The default mode is private which means that only the process
