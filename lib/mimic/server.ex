@@ -227,7 +227,9 @@ defmodule Mimic.Server do
         state
       end
 
-    %{state | expectations: expectations, stubs: stubs}
+    call_history = Map.delete(state.call_history, pid)
+
+    %{state | expectations: expectations, stubs: stubs, call_history: call_history}
   end
 
   defp find_stub(stubs, module, fn_name, arity, caller) do
@@ -548,9 +550,12 @@ defmodule Mimic.Server do
 
     case ensure_module_copied(module, state) do
       {:ok, state} ->
-        case get_in(state.call_history, [Access.key(caller_pid, %{}), {module, fn_name, arity}]) do
-          calls when is_list(calls) -> {:reply, {:ok, calls}, state}
-          _ -> {:reply, {:error, :not_mocked}, state}
+        case pop_in(state.call_history, [Access.key(caller_pid, %{}), {module, fn_name, arity}]) do
+          {calls, call_history} when is_list(calls) ->
+            {:reply, {:ok, Enum.reverse(calls)}, %{state | call_history: call_history}}
+
+          {nil, _} ->
+            {:reply, {:ok, []}, state}
         end
 
       {:error, reason} ->

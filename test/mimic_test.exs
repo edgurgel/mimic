@@ -1083,7 +1083,8 @@ defmodule Mimic.Test do
       Calculator.add(1, 2)
       Calculator.add(3, 4)
 
-      assert Mimic.calls(&Calculator.add/2) == [[3, 4], [1, 2]]
+      assert Mimic.calls(&Calculator.add/2) == [[1, 2], [3, 4]]
+      assert Mimic.calls(&Calculator.add/2) == []
     end
   end
 
@@ -1096,7 +1097,8 @@ defmodule Mimic.Test do
       Calculator.add(1, 2)
       Calculator.add(3, 4)
 
-      assert Mimic.calls(Calculator, :add, 2) == [[3, 4], [1, 2]]
+      assert Mimic.calls(Calculator, :add, 2) == [[1, 2], [3, 4]]
+      assert Mimic.calls(Calculator, :add, 2) == []
     end
 
     test "returns calls for expected functions" do
@@ -1105,7 +1107,32 @@ defmodule Mimic.Test do
       Calculator.add(1, 2)
       Calculator.add(3, 4)
 
-      assert Mimic.calls(Calculator, :add, 2) == [[3, 4], [1, 2]]
+      assert Mimic.calls(Calculator, :add, 2) == [[1, 2], [3, 4]]
+      assert Mimic.calls(Calculator, :add, 2) == []
+    end
+
+    test "return calls from child pid as well" do
+      parent_pid = self()
+
+      Calculator
+      |> expect(:add, fn _, _ -> @expected end)
+      |> stub(:mult, fn _, _ -> @stubbed end)
+
+      spawn_link(fn ->
+        Calculator
+        |> allow(parent_pid, self())
+
+        assert Calculator.add(1, 2) == @expected
+        assert Calculator.mult(3, 4) == @stubbed
+        send(parent_pid, :ok)
+      end)
+
+      assert_receive :ok
+      assert Mimic.calls(&Calculator.add/2) == [[1, 2]]
+      assert Mimic.calls(&Calculator.add/2) == []
+
+      assert Mimic.calls(&Calculator.mult/2) == [[3, 4]]
+      assert Mimic.calls(&Calculator.mult/2) == []
     end
 
     test "raises when mock is not defined" do
@@ -1140,7 +1167,8 @@ defmodule Mimic.Test do
       end)
 
       assert_receive :ok
-      assert Mimic.calls(Calculator, :add, 2) == [[3, 4], [1, 2]]
+      assert Mimic.calls(Calculator, :add, 2) == [[1, 2], [3, 4]]
+      assert Mimic.calls(Calculator, :add, 2) == []
     end
 
     test "returns calls for expected functions" do
@@ -1155,7 +1183,8 @@ defmodule Mimic.Test do
       end)
 
       assert_receive :ok
-      assert Mimic.calls(Calculator, :add, 2) == [[3, 4], [1, 2]]
+      assert Mimic.calls(Calculator, :add, 2) == [[1, 2], [3, 4]]
+      assert Mimic.calls(Calculator, :add, 2) == []
     end
 
     test "raises when mock is not defined" do
