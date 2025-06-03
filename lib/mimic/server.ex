@@ -610,7 +610,11 @@ defmodule Mimic.Server do
        ) do
     cond do
       num_applied_calls + 1 == num_calls ->
-        {:ok, expectation.func, tl(expectations)}
+        case expectations do
+          # Last expectation was fulfilled leave the expectation to avoid calling stubs or original function
+          [_last] -> {:ok, expectation.func, [%{expectation | num_applied_calls: num_calls}]}
+          _ -> {:ok, expectation.func, tl(expectations)}
+        end
 
       num_applied_calls + 1 < num_calls ->
         {:ok, expectation.func,

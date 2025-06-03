@@ -9,12 +9,17 @@ defmodule Mimic.DSLTest do
   test "basic example" do
     stub(Calculator.add(_x, _y), do: @stub)
     expect Calculator.add(x, y), do: x + y
+    expect Calculator.add(x, y), do: x + y + 1
     expect Calculator.mult(x, y), do: x * y
 
     assert Calculator.add(2, 3) == 5
     assert Calculator.mult(2, 3) == 6
+    assert Calculator.add(2, 3) == 6
 
-    assert Calculator.add(2, 3) == @stub
+    message =
+      ~r"expected Calculator.add/2 to be called 1 time\(s\) but it has been called 2 time\(s\)"
+
+    assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.add(5, 3) end
   end
 
   test "guards on stub" do
