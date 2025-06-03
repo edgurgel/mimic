@@ -14,7 +14,7 @@ defmodule Mimic.DSLTest do
     assert Calculator.add(2, 3) == 5
     assert Calculator.mult(2, 3) == 6
 
-    assert Calculator.add(2, 3) == @stub
+    assert_raise Mimic.UnexpectedCallError, fn -> Calculator.add(5, 3) end
   end
 
   test "guards on stub" do

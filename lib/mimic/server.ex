@@ -412,7 +412,18 @@ defmodule Mimic.Server do
         update_in(
           state.expectations,
           [Access.key(owner, %{}), {module, fn_name, arity}],
-          &((&1 || []) ++ [expectation])
+          fn
+            nil ->
+              # Always add a 0 expectation at the end once there is at least one expectation
+              [expectation, %Expectation{func: func, num_calls: 0}]
+
+            expectations ->
+              # Add the new expectation as the second last
+              [last | expectations] = Enum.reverse(expectations)
+
+              [last, expectation | expectations]
+              |> Enum.reverse()
+          end
         )
 
       {:reply, {:ok, module}, %{state | expectations: expectations}}
