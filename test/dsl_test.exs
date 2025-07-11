@@ -17,7 +17,7 @@ defmodule Mimic.DSLTest do
     assert Calculator.add(2, 3) == 6
 
     message =
-      ~r"expected Calculator.add/2 to be called 1 time\(s\) but it has been called 2 time\(s\)"
+      ~r"expected Calculator.add/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
 
     assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.add(5, 3) end
   end

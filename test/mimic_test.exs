@@ -153,6 +153,43 @@ defmodule Mimic.Test do
     end
   end
 
+  describe "expectations after execution" do
+    setup :set_mimic_private
+    setup :verify_on_exit!
+
+    test "expectations after execution" do
+      assert 3 == Calculator.add(1, 2)
+
+      expect(Calculator, :add, fn x, y -> x * y end)
+
+      assert 2 == Calculator.add(1, 2)
+
+      expect(Calculator, :add, fn x, y -> 2 * x * y end)
+
+      assert 4 == Calculator.add(1, 2)
+
+      message =
+        ~r"expected Calculator.add/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
+
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.add(1, 2) end
+    end
+  end
+
+  describe "stubs after expectations" do
+    setup :set_mimic_private
+    setup :verify_on_exit!
+
+    test "stubs after expectations" do
+      expect(Calculator, :add, fn x, y -> x + y end)
+
+      assert Calculator.add(2, 3) == 5
+
+      stub(Calculator, :add, fn x, y -> x * y end)
+      assert Calculator.mult(2, 3) == 6
+      verify!()
+    end
+  end
+
   describe "stub/3 private mode" do
     setup :set_mimic_private
 
@@ -224,7 +261,7 @@ defmodule Mimic.Test do
       assert Calculator.add(1, 1) == @expected_2
 
       message =
-        ~r"expected Calculator.add/2 to be called 1 time\(s\) but it has been called 2 time\(s\)"
+        ~r"expected Calculator.add/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
 
       assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.add(5, 3) end
       verify!()
@@ -327,7 +364,7 @@ defmodule Mimic.Test do
         assert Calculator.add(1, 1) == @expected
 
         message =
-          ~r"expected Calculator.add/2 to be called 1 time\(s\) but it has been called 2 time\(s\)"
+          ~r"expected Calculator.add/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
 
         assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.add(5, 3) end
 
@@ -448,7 +485,7 @@ defmodule Mimic.Test do
       assert Calculator.mult(5, 0) == 5 * 2
 
       message =
-        ~r"expected Calculator.mult/2 to be called 1 time\(s\) but it has been called 2 time\(s\)"
+        ~r"expected Calculator.mult/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
 
       assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(5, 3) end
     end
@@ -568,7 +605,7 @@ defmodule Mimic.Test do
         assert Calculator.mult(5, :_) == 10
 
         message =
-          ~r"expected Calculator.mult/2 to be called 1 time\(s\) but it has been called 2 time\(s\)"
+          ~r"expected Calculator.mult/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
 
         assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(5, 3) end
 

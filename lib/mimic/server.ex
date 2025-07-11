@@ -283,7 +283,11 @@ defmodule Mimic.Server do
             {:reply, {:unexpected, num_calls, num_applied_calls}, state}
         end
 
-      _ ->
+      # there have been expectations for this mfa but they have all been fullfilled
+      [] ->
+        {:reply, {:unexpected, 0, 1}, state}
+
+      nil ->
         case find_stub(state.stubs, module, fn_name, arity, caller) do
           :unexpected ->
             {:reply, :original, state}
@@ -412,7 +416,11 @@ defmodule Mimic.Server do
         update_in(
           state.expectations,
           [Access.key(owner, %{}), {module, fn_name, arity}],
-          &((&1 || []) ++ [expectation])
+          fn
+            # there have never been any expectations for this mfa, so far, now there is one
+            nil -> [expectation]
+            existing_expectations -> existing_expectations ++ [expectation]
+          end
         )
 
       {:reply, {:ok, module}, %{state | expectations: expectations}}
@@ -461,12 +469,16 @@ defmodule Mimic.Server do
     expectations = state.expectations[pid] || %{}
 
     pending =
-      for {{module, fn_name, arity}, mfa_expectations} <- expectations,
-          expectation = %Expectation{num_applied_calls: num_applied_calls, num_calls: num_calls} <-
-            mfa_expectations,
-          num_calls != num_applied_calls do
-        {{module, fn_name, arity}, expectation.num_calls, expectation.num_applied_calls}
-      end
+      expectations
+      |> Enum.flat_map(fn {{module, fn_name, arity}, mfa_expectations} ->
+        (mfa_expectations || [])
+        |> Enum.filter(fn %Expectation{num_applied_calls: num_applied_calls, num_calls: num_calls} ->
+          num_calls != num_applied_calls
+        end)
+        |> Enum.map(fn expectation ->
+          {{module, fn_name, arity}, expectation.num_calls, expectation.num_applied_calls}
+        end)
+      end)
 
     {:reply, pending, state}
   end
@@ -611,8 +623,6 @@ defmodule Mimic.Server do
     cond do
       num_applied_calls + 1 == num_calls ->
         case expectations do
-          # Last expectation was fulfilled leave the expectation to avoid calling stubs or original function
-          [_last] -> {:ok, expectation.func, [%{expectation | num_applied_calls: num_calls}]}
           _ -> {:ok, expectation.func, tl(expectations)}
         end
 
