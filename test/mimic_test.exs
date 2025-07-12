@@ -214,7 +214,7 @@ defmodule Mimic.Test do
       assert Calculator.add(3, 4) == 7
     end
 
-    test "invokes stub after expectations are fulfilled" do
+    test "return stub when all expectations are fulfilled and another call is made" do
       Calculator
       |> stub(:add, fn _x, _y -> @stubbed end)
       |> expect(:add, fn _, _ -> @expected_1 end)
@@ -223,6 +223,7 @@ defmodule Mimic.Test do
       assert Calculator.add(1, 1) == @expected_1
       assert Calculator.add(1, 1) == @expected_2
       assert Calculator.add(1, 1) == @stubbed
+
       verify!()
     end
 
@@ -310,7 +311,7 @@ defmodule Mimic.Test do
       assert_receive :ok
     end
 
-    test "invokes stub after expectations are fulfilled" do
+    test "raise when all expectations are fulfilled and another call is made" do
       Calculator
       |> stub(:add, fn _x, _y -> @stubbed end)
       |> expect(:add, fn _, _ -> @expected end)
@@ -431,7 +432,7 @@ defmodule Mimic.Test do
       verify!(self())
     end
 
-    test "expecting when no expectation is defined calls original" do
+    test "raise when all expectations are fulfilled and another call is made" do
       Calculator
       |> expect(:add, fn x, _y -> x + 2 end)
       |> expect(:mult, fn x, _y -> x * 2 end)
@@ -439,7 +440,10 @@ defmodule Mimic.Test do
       assert Calculator.add(4, 0) == 4 + 2
       assert Calculator.mult(5, 0) == 5 * 2
 
-      assert Calculator.mult(5, 3) == 15
+      message =
+        ~r"expected Calculator.mult/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
+
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(5, 3) end
     end
 
     test "raises if a non copied module is given" do
@@ -481,6 +485,14 @@ defmodule Mimic.Test do
       end)
 
       assert_receive :ok
+    end
+
+    test "expectation on a function and call others" do
+      Calculator
+      |> expect(:add, fn x, _y -> x + 2 end)
+
+      assert Calculator.add(4, :_) == 6
+      assert Calculator.mult(5, 2) == 10
     end
 
     test "stacking expectations" do
@@ -545,7 +557,7 @@ defmodule Mimic.Test do
       verify!(self())
     end
 
-    test "expecting when no expectation is defined calls original" do
+    test "raise when all expectations are fulfilled and another call is made" do
       Calculator
       |> expect(:add, fn x, _y -> x + 2 end)
       |> expect(:mult, fn x, _y -> x * 2 end)
@@ -556,7 +568,10 @@ defmodule Mimic.Test do
         assert Calculator.add(4, :_) == 6
         assert Calculator.mult(5, :_) == 10
 
-        assert Calculator.mult(5, 3) == 15
+        message =
+          ~r"expected Calculator.mult/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
+
+        assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(5, 3) end
 
         send(parent_pid, :ok)
       end)

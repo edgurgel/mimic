@@ -17,7 +17,7 @@ Just add `:mimic` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:mimic, "~> 1.12", only: :test}
+    {:mimic, "~> 2.0", only: :test}
   ]
 end
 ```
@@ -101,6 +101,10 @@ Calculator
 
 assert Calculator.add(1, 3) == {:add, 1, 3}
 assert Calculator.add(4, 5) == {:add, 4, 5}
+Calculator.add(1, 4)
+
+# Will raise error because more than 2 calls to Calculator.add were made and there is no stub
+# ** (Mimic.UnexpectedCallError) expected Calculator.add/2 to be called 0 time(s) but it has been called 1 time(s) in process #PID<0.281.0>
 ```
 
 With `use Mimic`, verification `expect/4` function call of is done automatically on test case end. `verify!/1` can be used in case custom verification timing required:
