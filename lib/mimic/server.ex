@@ -283,16 +283,23 @@ defmodule Mimic.Server do
             {:reply, {:unexpected, num_calls, num_applied_calls}, state}
         end
 
-      _ ->
+      expectations ->
         case find_stub(state.stubs, module, fn_name, arity, caller) do
-          :unexpected ->
-            {:reply, :original, state}
-
           {:ok, func} ->
             # Track call history for stubs too
             state = put_call_history(state, caller, module, fn_name, arity, args)
 
             {:reply, {:ok, func}, state}
+
+          :unexpected ->
+            # expectations for this mfa existed but they have all been fullfilled
+            if expectations == [] do
+              {:reply, {:unexpected, 0, 1}, state}
+            else
+              # nil so no expectations were ever defined for this mfa
+              # This case happens when another mfa was set-up
+              {:reply, :original, state}
+            end
         end
     end
   end
@@ -610,11 +617,7 @@ defmodule Mimic.Server do
        ) do
     cond do
       num_applied_calls + 1 == num_calls ->
-        case expectations do
-          # Last expectation was fulfilled leave the expectation to avoid calling stubs or original function
-          [_last] -> {:ok, expectation.func, [%{expectation | num_applied_calls: num_calls}]}
-          _ -> {:ok, expectation.func, tl(expectations)}
-        end
+        {:ok, expectation.func, tl(expectations)}
 
       num_applied_calls + 1 < num_calls ->
         {:ok, expectation.func,
