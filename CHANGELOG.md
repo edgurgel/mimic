@@ -25,7 +25,7 @@ Now with Mimic 2 this will raise:
  assert Calculator.add(1, 1) == :expected2
  Calculator.add(1, 1)
 # Will raise error because more than 2 calls to Calculator.add were made and there is no stub
-# ** (Mimic.UnexpectedCallError) Calculator.add/2 called in process #PID<.*> but expectations are fully fulfilled
+# ** (Mimic.UnexpectedCallError) Calculator.add/2 called in process #PID<.*> but expectations are already fulfilled
 ```
 
 If there is a stub the stub will be called instead. This behaviour is the same as before.
