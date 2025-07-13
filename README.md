@@ -104,7 +104,7 @@ assert Calculator.add(4, 5) == {:add, 4, 5}
 Calculator.add(1, 4)
 
 # Will raise error because more than 2 calls to Calculator.add were made and there is no stub
-# ** (Mimic.UnexpectedCallError) expected Calculator.add/2 to be called 0 time(s) but it has been called 1 time(s) in process #PID<0.281.0>
+# ** (Mimic.UnexpectedCallError) Calculator.add/2 called in process #PID<.*> but expectations are already fulfilled
 ```
 
 With `use Mimic`, verification `expect/4` function call of is done automatically on test case end. `verify!/1` can be used in case custom verification timing required:

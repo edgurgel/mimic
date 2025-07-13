@@ -441,7 +441,31 @@ defmodule Mimic.Test do
       assert Calculator.mult(5, 0) == 5 * 2
 
       message =
-        ~r"expected Calculator.mult/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
+        ~r"Calculator.mult/2 called in process #PID<.*> but expectations are already fulfilled"
+
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(5, 3) end
+    end
+
+    test "expectation can be added after being fulfilled" do
+      Calculator
+      |> expect(:add, fn x, _y -> x + 2 end)
+      |> expect(:mult, fn x, _y -> x * 2 end)
+
+      assert Calculator.add(4, 0) == 4 + 2
+      assert Calculator.mult(5, 0) == 5 * 2
+
+      message =
+        ~r"Calculator.mult/2 called in process #PID<.*> but expectations are already fulfilled"
+
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(5, 3) end
+
+      Calculator
+      |> expect(:mult, fn x, _y -> x * 2 end)
+
+      assert Calculator.mult(4, 0) == 4 * 2
+
+      message =
+        ~r"Calculator.mult/2 called in process #PID<.*> but expectations are already fulfilled"
 
       assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(5, 3) end
     end
@@ -569,7 +593,7 @@ defmodule Mimic.Test do
         assert Calculator.mult(5, :_) == 10
 
         message =
-          ~r"expected Calculator.mult/2 to be called 0 time\(s\) but it has been called 1 time\(s\)"
+          ~r"Calculator.mult/2 called in process #PID<.*> but expectations are already fulfilled"
 
         assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(5, 3) end
 
