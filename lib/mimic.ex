@@ -196,6 +196,9 @@ defmodule Mimic do
   function must be called within the lifetime of the calling `pid` (i.e. the
   test example).
 
+  Once the expectation is fulfilled any calls to this MFA will raise an error
+  unless there is a stub through `stub/3`
+
   ## Arguments:
 
     * `module` - the name of the module in which we're adding the stub.

@@ -139,6 +139,12 @@ defmodule Mimic.Server do
       :original ->
         apply_original(module, fn_name, args)
 
+      {:unexpected, :fulfilled} ->
+        mfa = Exception.format_mfa(module, fn_name, arity)
+
+        raise Mimic.UnexpectedCallError,
+              "#{mfa} called in process #{inspect(self())} but expectations are already fulfilled"
+
       {:unexpected, num_calls, num_applied_calls} ->
         mfa = Exception.format_mfa(module, fn_name, arity)
 
@@ -283,16 +289,22 @@ defmodule Mimic.Server do
             {:reply, {:unexpected, num_calls, num_applied_calls}, state}
         end
 
-      _ ->
-        case find_stub(state.stubs, module, fn_name, arity, caller) do
-          :unexpected ->
-            {:reply, :original, state}
-
-          {:ok, func} ->
+      expectations ->
+        case {find_stub(state.stubs, module, fn_name, arity, caller), expectations} do
+          {{:ok, func}, _} ->
             # Track call history for stubs too
             state = put_call_history(state, caller, module, fn_name, arity, args)
 
             {:reply, {:ok, func}, state}
+
+          {:unexpected, []} ->
+            # expectations for this mfa existed but they have all been fulfilled
+            {:reply, {:unexpected, :fulfilled}, state}
+
+          {:unexpected, nil} ->
+            # no expectations were ever defined for this mfa
+            # This case happens when another mfa was set-up
+            {:reply, :original, state}
         end
     end
   end
