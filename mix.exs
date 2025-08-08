@@ -32,7 +32,7 @@ defmodule Mimic.Mixfile do
 
   defp deps do
     [
-      {:ham, "~> 0.2"},
+      {:ham, "~> 0.3"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, "~> 1.0", only: :dev}
     ]
