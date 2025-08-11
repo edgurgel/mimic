@@ -78,7 +78,7 @@ defmodule Mimic.Module do
   defp compiler_options(module) do
     options =
       module.module_info(:compile)
-      |> Keyword.get(:options)
+      |> Keyword.get(:options, [])
       |> Enum.filter(&(&1 != :from_core))
 
     [:return_errors | [:debug_info | options]]
