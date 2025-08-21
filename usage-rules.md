@@ -1,6 +1,6 @@
 # Usage Rules for Mimic Library
 
-This document provides essential guidelines for coding agents when using the Mimic mocking library in Elixir projects.
+This document provides essential guidelines for coding agents when using the Mimic mocking library in Elixir projects. You should not mock any module that are part of the Elixir standard library nor the Otp library directly.
 
 ## Critical Setup Requirements
 
@@ -95,7 +95,6 @@ reject(Calculator, :dangerous_operation, 1)
 
 #### Private Mode (Default - Recommended)
 
-- **IMPORTANT**: Use `setup :set_mimic_private` or `setup :verify_on_exit!`
 - Tests can run with `async: true`
 - Each process sees its own mocks
 - Use `allow/3` for multi-process scenarios
