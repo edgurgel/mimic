@@ -414,6 +414,14 @@ defmodule Mimic do
     arity = length(args)
 
     raise_if_not_exported_function!(module, function_name, arity)
+
+    if Mimic.Module.copied?(module) == false do
+      case Mimic.Server.ensure_copied(module) do
+        :ok -> :ok
+        error -> validate_server_response(error, :call_original)
+      end
+    end
+
     func = Function.capture(Mimic.Module.original(module), function_name, arity)
 
     Kernel.apply(func, args)

@@ -1031,6 +1031,24 @@ defmodule Mimic.Test do
   describe "call_original/3" do
     setup :set_mimic_private
 
+    test "calling call_original on a module that has not been copied yet" do
+      module = Mimic.CallOriginalTestModule
+      # Calling copy here but Mimic does not actually copy until Mimic is needed
+      assert_raise ArgumentError,
+                   "Module Mimic.CallOriginalTestModule has not been copied. See docs for Mimic.copy/1",
+                   fn ->
+                     assert Mimic.call_original(module, :my_function, []) ==
+                              :original
+                   end
+
+      Mimic.copy(module)
+      assert Mimic.Module.copied?(module) == false
+      assert Mimic.call_original(module, :my_function, []) == :original
+
+      # call_original should copy the module
+      assert Mimic.Module.copied?(module) == true
+    end
+
     test "calls original function even if it has been is stubbed" do
       stub_with(Calculator, InverseCalculator)
 

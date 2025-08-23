@@ -112,6 +112,11 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:get_calls, {module, fn_name, arity}, self()})
   end
 
+  @spec ensure_copied(module) :: :ok | {:error, {:module_not_copied, module}}
+  def ensure_copied(module) do
+    GenServer.call(__MODULE__, {:ensure_copied, module}, @long_timeout)
+  end
+
   def apply(module, fn_name, args) do
     arity = Enum.count(args)
     original_module = Mimic.Module.original(module)
@@ -572,6 +577,13 @@ defmodule Mimic.Server do
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:ensure_copied, module}, _from, state) do
+    case ensure_module_copied(module, state) do
+      {:ok, new_state} -> {:reply, :ok, new_state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
