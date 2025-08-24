@@ -489,6 +489,17 @@ defmodule Mimic.Test do
         expect(Calculator, :add, 0, fn x, y -> x + y end)
       end
     end
+
+    test "macros" do
+      expect(Calculator, :add, fn x, _y -> x + 2 end)
+
+      quote do
+        require Calculator
+
+        assert Calculator.add(4, 2) == Calculator.add_macro(4, 2)
+      end
+      |> Code.eval_quoted()
+    end
   end
 
   describe "expect/4 global mode" do
