@@ -117,8 +117,9 @@ defmodule Mimic.Module do
     mimic_info = module_mimic_info(opts)
     mimic_behaviours = generate_mimic_behaviours(module)
     mimic_functions = generate_mimic_functions(module)
+    mimic_macros = generate_mimic_macros(module)
     mimic_struct = generate_mimic_struct(module)
-    quoted = [mimic_info, mimic_struct | mimic_behaviours ++ mimic_functions]
+    quoted = [mimic_info, mimic_struct | mimic_behaviours ++ mimic_functions ++ mimic_macros]
     Module.create(module, quoted, Macro.Env.location(__ENV__))
     module
   end
@@ -175,13 +176,40 @@ defmodule Mimic.Module do
   defp generate_mimic_functions(module) do
     internal_functions = [__info__: 1, module_info: 0, module_info: 1]
 
-    for {fn_name, arity} <- module.module_info(:exports),
+    functions =
+      if function_exported?(module, :__info__, 1) do
+        module.__info__(:functions)
+      else
+        module.module_info(:exports)
+      end
+
+    for {fn_name, arity} <- functions,
         {fn_name, arity} not in internal_functions do
       args = Macro.generate_arguments(arity, module)
 
       quote do
         def unquote(fn_name)(unquote_splicing(args)) do
           Server.apply(__MODULE__, unquote(fn_name), unquote(args))
+        end
+      end
+    end
+  end
+
+  defp generate_mimic_macros(module) do
+    macros =
+      if function_exported?(module, :__info__, 1) do
+        module.__info__(:macros)
+      else
+        []
+      end
+
+    for {macro_name, arity} <- macros do
+      args = Macro.generate_arguments(arity, module)
+      macro_fun = String.to_existing_atom("MACRO-#{macro_name}")
+
+      quote do
+        defmacro unquote(macro_name)(unquote_splicing(args)) do
+          Server.apply(__MODULE__, unquote(macro_fun), [__CALLER__ | unquote(args)])
         end
       end
     end

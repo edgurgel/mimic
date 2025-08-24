@@ -1,6 +1,8 @@
 defmodule AddAdapter do
   @moduledoc false
   @callback add(number(), number()) :: number()
+  @macrocallback add_macro(Macro.t(), Macro.t()) :: Macro.t()
+  @optional_callbacks add_macro: 2
 end
 
 defmodule MultAdapter do
@@ -13,6 +15,7 @@ defmodule Calculator do
   @behaviour AddAdapter
   @behaviour MultAdapter
   def add(x, y), do: x + y
+  defmacro add_macro(x, y), do: {:+, [], [x, y]}
   def mult(x, y), do: x * y
 end
 
