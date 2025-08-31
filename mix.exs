@@ -2,7 +2,7 @@ defmodule Mimic.Mixfile do
   use Mix.Project
 
   @source_url "https://github.com/edgurgel/mimic"
-  @version "2.0.2"
+  @version "2.1.0"
 
   def project do
     [
@@ -41,7 +41,7 @@ defmodule Mimic.Mixfile do
   defp package do
     [
       description: "Mocks for Elixir functions",
-      files: ["lib", "LICENSE", "mix.exs", "README.md", ".formatter.exs"],
+      files: ["lib", "LICENSE", "mix.exs", "README.md", ".formatter.exs", "usage-rules.md"],
       licenses: ["Apache-2.0"],
       maintainers: ["Eduardo Gurgel"],
       links: %{

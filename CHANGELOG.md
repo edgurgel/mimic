@@ -1,3 +1,16 @@
+# 2.1.0 (2025-08-31)
+
+* feat: Usage rules by @pcharbon70 in https://github.com/edgurgel/mimic/pull/102
+* fix: define replaced Elixir module macros using defmacro by @yastanotheruser in https://github.com/edgurgel/mimic/pull/104
+
+# 2.0.2 (2025-08-12)
+
+* fix: Mimic.Module compilation when no options are stored. https://github.com/edgurgel/mimic/pull/101
+
+# 2.0.1 (2025-08-08)
+
+* Bump `ham` requirement
+
 # 2.0.0 (2025-07-13)
 
 ## Breaking changes
