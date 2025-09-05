@@ -115,11 +115,17 @@ defmodule Mimic.Module do
 
   defp create_mock(module, opts) do
     mimic_info = module_mimic_info(opts)
+    mimic_callbacks = generate_mimic_callbacks(module)
     mimic_behaviours = generate_mimic_behaviours(module)
     mimic_functions = generate_mimic_functions(module)
     mimic_macros = generate_mimic_macros(module)
     mimic_struct = generate_mimic_struct(module)
-    quoted = [mimic_info, mimic_struct | mimic_behaviours ++ mimic_functions ++ mimic_macros]
+
+    quoted = [
+      mimic_info,
+      mimic_struct | mimic_behaviours ++ mimic_functions ++ mimic_macros ++ mimic_callbacks
+    ]
+
     Module.create(module, quoted, Macro.Env.location(__ENV__))
     module
   end
@@ -165,6 +171,23 @@ defmodule Mimic.Module do
           @enforce_keys unquote(required_fields)
           defstruct unquote(struct_params)
         end
+      end
+    end
+  end
+
+  defp generate_mimic_callbacks(module) do
+    callbacks =
+      if function_exported?(module, :__info__, 1) do
+        module.behaviour_info(:callbacks)
+      else
+        []
+      end
+
+    for {callback_name, arity} <- callbacks do
+      args = Enum.map(1..arity, fn _ -> quote(do: any()) end)
+
+      quote do
+        @callback unquote(callback_name)(unquote_splicing(args)) :: any()
       end
     end
   end
