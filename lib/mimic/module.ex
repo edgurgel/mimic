@@ -177,7 +177,7 @@ defmodule Mimic.Module do
 
   defp generate_mimic_callbacks(module) do
     callbacks =
-      if function_exported?(module, :__info__, 1) do
+      if function_exported?(module, :behaviour_info, 1) do
         module.behaviour_info(:callbacks)
       else
         []
