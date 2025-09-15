@@ -115,16 +115,12 @@ defmodule Mimic.Module do
 
   defp create_mock(module, opts) do
     mimic_info = module_mimic_info(opts)
-    mimic_callbacks = generate_mimic_callbacks(module)
     mimic_behaviours = generate_mimic_behaviours(module)
     mimic_functions = generate_mimic_functions(module)
     mimic_macros = generate_mimic_macros(module)
     mimic_struct = generate_mimic_struct(module)
 
-    quoted = [
-      mimic_info,
-      mimic_struct | mimic_behaviours ++ mimic_functions ++ mimic_macros ++ mimic_callbacks
-    ]
+    quoted = [mimic_info, mimic_struct | mimic_behaviours ++ mimic_functions ++ mimic_macros]
 
     Module.create(module, quoted, Macro.Env.location(__ENV__))
     module
@@ -175,39 +171,17 @@ defmodule Mimic.Module do
     end
   end
 
-  defp generate_mimic_callbacks(module) do
-    callbacks =
-      if function_exported?(module, :behaviour_info, 1) do
-        module.behaviour_info(:callbacks)
-      else
-        []
-      end
-
-    for {callback_name, arity} <- callbacks do
-      args = Enum.map(1..arity, fn _ -> quote(do: any()) end)
-
-      quote do
-        @callback unquote(callback_name)(unquote_splicing(args)) :: any()
-      end
-    end
-  end
-
   defp module_mimic_info(opts) do
     quote do: def(__mimic_info__, do: {:ok, unquote(Macro.escape(opts))})
   end
 
   defp generate_mimic_functions(module) do
     internal_functions = [__info__: 1, module_info: 0, module_info: 1]
-
-    functions =
-      if function_exported?(module, :__info__, 1) do
-        module.__info__(:functions)
-      else
-        module.module_info(:exports)
-      end
+    macro_functions = macro_functions(module)
+    functions = module.module_info(:exports)
 
     for {fn_name, arity} <- functions,
-        {fn_name, arity} not in internal_functions do
+        {fn_name, arity} not in (internal_functions ++ macro_functions) do
       args = Macro.generate_arguments(arity, module)
 
       quote do
@@ -215,6 +189,16 @@ defmodule Mimic.Module do
           Server.apply(__MODULE__, unquote(fn_name), unquote(args))
         end
       end
+    end
+  end
+
+  defp macro_functions(module) do
+    if function_exported?(module, :__info__, 1) do
+      :macros
+      |> module.__info__()
+      |> Enum.map(fn {name, arity} -> {String.to_atom("MACRO-#{name}"), arity + 1} end)
+    else
+      []
     end
   end
 
