@@ -1006,6 +1006,8 @@ defmodule Mimic.Test do
   end
 
   describe "behaviours" do
+    setup :set_mimic_private
+
     test "copies behaviour attributes" do
       behaviours =
         Calculator.module_info(:attributes)
@@ -1014,6 +1016,15 @@ defmodule Mimic.Test do
 
       assert AddAdapter in behaviours
       assert MultAdapter in behaviours
+    end
+
+    test "Regression test for PR #105: doesn't remove behaviour_info/1" do
+      Mimic.copy(MultAdapter)
+
+      stub(MultAdapter)
+      expect(MultAdapter, :behaviour_info, fn :callbacks -> [mult: 2] end)
+
+      assert MultAdapter.behaviour_info(:callbacks) == [mult: 2]
     end
   end
 

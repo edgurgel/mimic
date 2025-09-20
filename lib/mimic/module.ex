@@ -119,7 +119,9 @@ defmodule Mimic.Module do
     mimic_functions = generate_mimic_functions(module)
     mimic_macros = generate_mimic_macros(module)
     mimic_struct = generate_mimic_struct(module)
+
     quoted = [mimic_info, mimic_struct | mimic_behaviours ++ mimic_functions ++ mimic_macros]
+
     Module.create(module, quoted, Macro.Env.location(__ENV__))
     module
   end
@@ -175,16 +177,11 @@ defmodule Mimic.Module do
 
   defp generate_mimic_functions(module) do
     internal_functions = [__info__: 1, module_info: 0, module_info: 1]
-
-    functions =
-      if function_exported?(module, :__info__, 1) do
-        module.__info__(:functions)
-      else
-        module.module_info(:exports)
-      end
+    macro_functions = macro_functions(module)
+    functions = module.module_info(:exports)
 
     for {fn_name, arity} <- functions,
-        {fn_name, arity} not in internal_functions do
+        {fn_name, arity} not in (internal_functions ++ macro_functions) do
       args = Macro.generate_arguments(arity, module)
 
       quote do
@@ -192,6 +189,16 @@ defmodule Mimic.Module do
           Server.apply(__MODULE__, unquote(fn_name), unquote(args))
         end
       end
+    end
+  end
+
+  defp macro_functions(module) do
+    if function_exported?(module, :__info__, 1) do
+      :macros
+      |> module.__info__()
+      |> Enum.map(fn {name, arity} -> {String.to_atom("MACRO-#{name}"), arity + 1} end)
+    else
+      []
     end
   end
 
