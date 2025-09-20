@@ -1,3 +1,7 @@
+# 2.1.1 (2025-09-20)
+
+* Don't remove behaviour_info/1 from behaviour modules by @escobera in #105
+
 # 2.1.0 (2025-08-31)
 
 * feat: Usage rules by @pcharbon70 in https://github.com/edgurgel/mimic/pull/102
