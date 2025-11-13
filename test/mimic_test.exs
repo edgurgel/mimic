@@ -1103,26 +1103,42 @@ defmodule Mimic.Test do
              }
     end
 
-    if @elixir_version >= 1.18 do
-      test "copies struct fields" do
-        StructNoEnforceKeys
-        |> stub(:bar, fn -> @stubbed end)
+    cond do
+      @elixir_version >= 1.19 ->
+        test "copies struct fields" do
+          StructNoEnforceKeys
+          |> stub(:bar, fn -> @stubbed end)
 
-        assert StructNoEnforceKeys.__info__(:struct) == [
-                 %{field: :foo, default: nil, required: false},
-                 %{field: :bar, default: nil, required: false}
-               ]
-      end
-    else
-      test "copies struct fields" do
-        StructNoEnforceKeys
-        |> stub(:bar, fn -> @stubbed end)
+          # Why pattern matching:
+          # Direct comparison causes the compiler to emit a warning.
+          # The `default` key may or may not exist in the struct info.
+          assert [
+                   %{field: :foo, default: nil, required: false},
+                   %{field: :bar, default: nil, required: false}
+                 ] = StructNoEnforceKeys.__info__(:struct)
+        end
 
-        assert StructNoEnforceKeys.__info__(:struct) == [
-                 %{field: :foo, required: false},
-                 %{field: :bar, required: false}
-               ]
-      end
+      @elixir_version >= 1.18 ->
+        test "copies struct fields" do
+          StructNoEnforceKeys
+          |> stub(:bar, fn -> @stubbed end)
+
+          assert StructNoEnforceKeys.__info__(:struct) == [
+                   %{field: :foo, default: nil},
+                   %{field: :bar, default: nil}
+                 ]
+        end
+
+      true ->
+        test "copies struct fields" do
+          StructNoEnforceKeys
+          |> stub(:bar, fn -> @stubbed end)
+
+          assert StructNoEnforceKeys.__info__(:struct) == [
+                   %{field: :foo, required: false},
+                   %{field: :bar, required: false}
+                 ]
+        end
     end
 
     test "protocol still works" do
