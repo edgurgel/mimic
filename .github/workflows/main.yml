@@ -41,6 +41,8 @@ jobs:
             elixir: 1.17.x
           - otp: 27.x
             elixir: 1.18.x
+          - otp: 27.x
+            elixir: 1.19.x
     env:
       MIX_ENV: test
     steps:
