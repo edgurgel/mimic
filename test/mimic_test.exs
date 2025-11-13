@@ -1109,8 +1109,8 @@ defmodule Mimic.Test do
         |> stub(:bar, fn -> @stubbed end)
 
         assert StructNoEnforceKeys.__info__(:struct) == [
-                 %{field: :foo, default: nil},
-                 %{field: :bar, default: nil}
+                 %{field: :foo, default: nil, required: false},
+                 %{field: :bar, default: nil, required: false}
                ]
       end
     else
