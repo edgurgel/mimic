@@ -129,13 +129,12 @@ defmodule Mimic.Module do
   if @elixir_version >= 1.18 do
     defp generate_mimic_struct(module) do
       if function_exported?(module, :__info__, 1) && module.__info__(:struct) != nil do
-        struct_info = module.__info__(:struct) || []
-
         struct_template = Map.from_struct(module.__struct__())
 
         struct_params =
-          for %{field: field} <- struct_info,
-              do: {field, Macro.escape(struct_template[field])}
+          Enum.map(module.__info__(:struct), fn %{field: field} ->
+            {field, Macro.escape(struct_template[field])}
+          end)
 
         quote do
           defstruct unquote(struct_params)
