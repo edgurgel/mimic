@@ -1,3 +1,7 @@
+# 2.2.0 (2025-11-18)
+
+* Add elixir 1.19.x compatibility by @Geekfish in #107
+
 # 2.1.1 (2025-09-20)
 
 * Don't remove behaviour_info/1 from behaviour modules by @escobera in #105
