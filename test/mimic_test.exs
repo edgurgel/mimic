@@ -1280,4 +1280,11 @@ defmodule Mimic.Test do
       end
     end
   end
+
+  describe "set_mimic_global/1" do
+    test "raises if the test case is async" do
+      message = ~r/Mimic cannot be set to global mode when the ExUnit case is async/
+      assert_raise RuntimeError, message, fn -> set_mimic_global(%{async: true}) end
+    end
+  end
 end
