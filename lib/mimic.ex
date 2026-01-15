@@ -89,7 +89,7 @@ defmodule Mimic do
   defmacro __using__(_opts \\ []) do
     quote do
       import Mimic
-      setup :verify_on_exit!
+      setup {Mimic, :verify_on_exit!}
     end
   end
 
