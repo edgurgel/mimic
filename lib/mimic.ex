@@ -459,7 +459,14 @@ defmodule Mimic do
   ```
   """
   @spec set_mimic_global(map()) :: :ok
-  def set_mimic_global(_context \\ %{}), do: Server.set_global_mode(self())
+  def set_mimic_global(_context \\ %{})
+
+  def set_mimic_global(%{async: true}) do
+    raise "Mimic cannot be set to global mode when the ExUnit case is async. " <>
+            "If you want to use Mimic in global mode, remove \"async: true\" when using ExUnit.Case"
+  end
+
+  def set_mimic_global(_context), do: Server.set_global_mode(self())
 
   @doc """
   Chooses the mode based on ExUnit context. If `async` is `true` then
