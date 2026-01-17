@@ -1,3 +1,8 @@
+# 2.3.0 (2026-01-17)
+
+* fix: namespace auto setup verify_on_exit! by @PragTob in #111
+* feat: prevent global mode in async tests by @rbino in #110
+
 # 2.2.0 (2025-11-18)
 
 * Add elixir 1.19.x compatibility by @Geekfish in #107
