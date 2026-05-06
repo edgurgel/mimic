@@ -202,7 +202,7 @@ return new calls since the last time that `calls` was used.
 The default mode is private which means that only the process
 and explicitly allowed process will see the different behaviour.
 
-Calling `allow/2` will permit a different pid to call the stubs and expects from the original process.
+Calling `allow/3` will permit a different pid to call the stubs and expects from the original process.
 
 If you are using `Task` there is no need to use global mode as Tasks can see the same expectations and stubs from the calling process.
 
