@@ -251,7 +251,7 @@ defmodule Mimic do
 
   ## Raises:
 
-    * If `function` is not called by the stubbing process while calling `verify!/1`.
+    * If `function` is called by the stubbing process while calling `verify!/1`.
 
   ## Example:
 
@@ -286,7 +286,7 @@ defmodule Mimic do
 
   ## Raises:
 
-    * If `function` is not called by the stubbing process while calling `verify!/1`.
+    * If `function` is called by the stubbing process while calling `verify!/1`.
 
   ## Example:
 
