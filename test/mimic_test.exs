@@ -1005,6 +1005,123 @@ defmodule Mimic.Test do
     end
   end
 
+  describe "allow/3 with function allowances" do
+    setup :set_mimic_private
+    setup :verify_on_exit!
+
+    test "shares mocks with a process whose pid is discovered lazily" do
+      parent_pid = self()
+      name = :"lazy_calc_#{System.unique_integer([:positive])}"
+
+      Calculator
+      |> expect(:add, fn x, y -> x + y + 100 end)
+      |> allow(self(), fn -> Process.whereis(name) end)
+
+      spawn_link(fn ->
+        Process.register(self(), name)
+        result = Calculator.add(1, 2)
+        send(parent_pid, {:result, result})
+      end)
+
+      assert_receive {:result, 103}
+    end
+
+    test "lazy function is called on each mock invocation" do
+      parent_pid = self()
+      name = :"lazy_cache_#{System.unique_integer([:positive])}"
+      counter = :counters.new(1, [:atomics])
+
+      Calculator
+      |> expect(:add, 2, fn x, y -> x + y + 100 end)
+      |> allow(self(), fn ->
+        :counters.add(counter, 1, 1)
+        Process.whereis(name)
+      end)
+
+      spawn_link(fn ->
+        Process.register(self(), name)
+        Calculator.add(1, 2)
+        Calculator.add(3, 4)
+        send(parent_pid, :done)
+      end)
+
+      assert_receive :done
+      assert :counters.get(counter, 1) == 2
+    end
+
+    test "supports lazy allowances that return a list of pids" do
+      parent_pid = self()
+      name = :"lazy_list_#{System.unique_integer([:positive])}"
+
+      Calculator
+      |> expect(:add, fn x, y -> x + y + 200 end)
+      |> allow(self(), fn -> [Process.whereis(name)] end)
+
+      spawn_link(fn ->
+        Process.register(self(), name)
+        result = Calculator.add(5, 6)
+        send(parent_pid, {:result, result})
+      end)
+
+      assert_receive {:result, 211}
+    end
+
+    test "falls through to original when lazy function returns nil" do
+      allow(Calculator, self(), fn -> nil end)
+      assert Calculator.add(2, 3) == 5
+    end
+
+    test "supports stubs" do
+      parent_pid = self()
+      name = :"lazy_stub_#{System.unique_integer([:positive])}"
+
+      Calculator
+      |> stub(:add, fn x, y -> x * y end)
+      |> allow(self(), fn -> Process.whereis(name) end)
+
+      spawn_link(fn ->
+        Process.register(self(), name)
+        result = Calculator.add(3, 4)
+        send(parent_pid, {:result, result})
+      end)
+
+      assert_receive {:result, 12}
+    end
+
+    test "cleans up lazy allowances when owner process dies" do
+      parent_pid = self()
+      name = :"lazy_cleanup_#{System.unique_integer([:positive])}"
+
+      owner_pid =
+        spawn(fn ->
+          Calculator
+          |> stub(:add, fn _, _ -> 999 end)
+          |> allow(self(), fn -> Process.whereis(name) end)
+        end)
+
+      Process.monitor(owner_pid)
+      assert_receive {:DOWN, _, _, ^owner_pid, _}
+
+      :timer.sleep(1)
+
+      # After owner dies, lazy allowance should be gone — calls fall through to original
+      spawn_link(fn ->
+        Process.register(self(), name)
+        send(parent_pid, {:result, Calculator.add(1, 3)})
+      end)
+
+      assert_receive {:result, 4}
+    end
+
+    test "raises if you try to allow with function while in global mode" do
+      set_mimic_global()
+
+      assert_raise ArgumentError, "Allow must not be called when mode is global.", fn ->
+        allow(Calculator, self(), fn -> self() end)
+      end
+    end
+  end
+
   describe "mode/0 global mode" do
     setup :set_mimic_global
 

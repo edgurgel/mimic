@@ -3,6 +3,9 @@ defmodule Mimic.Server do
   alias Mimic.Cover
   @moduledoc false
 
+  # Fast-path lookup to avoid a GenServer call when no lazy allowances exist for a module
+  @lazy_modules_table :mimic_lazy_modules
+
   defmodule State do
     @moduledoc false
     defstruct verify_on_exit: MapSet.new(),
@@ -14,7 +17,8 @@ defmodule Mimic.Server do
               modules_to_be_copied: MapSet.new(),
               reset_tasks: %{},
               modules_opts: %{},
-              call_history: %{}
+              call_history: %{},
+              lazy_allowances: %{}
   end
 
   defmodule Expectation do
@@ -27,6 +31,11 @@ defmodule Mimic.Server do
   @spec allow(module, pid, pid) :: {:ok, module} | {:error, :global}
   def allow(module, owner_pid, allowed_pid) do
     GenServer.call(__MODULE__, {:allow, module, owner_pid, allowed_pid})
+  end
+
+  @spec allow_lazy(module, pid, (-> pid | [pid])) :: {:ok, module} | {:error, :global}
+  def allow_lazy(module, owner_pid, fun) when is_function(fun, 0) do
+    GenServer.call(__MODULE__, {:allow_lazy, module, owner_pid, fun})
   end
 
   @spec verify(pid) :: non_neg_integer
@@ -119,15 +128,21 @@ defmodule Mimic.Server do
     if function_exported?(original_module, fn_name, arity) do
       caller_pids = [self() | Process.get(:"$callers", [])]
 
-      case allowed_pid(caller_pids, module) do
-        {:ok, owner_pid} ->
-          do_apply(owner_pid, module, fn_name, arity, args)
-
-        _ ->
-          apply_original(module, fn_name, args)
+      with :none <- allowed_pid(caller_pids, module),
+           :none <- resolve_lazy_allowance(caller_pids, module) do
+        apply_original(module, fn_name, args)
+      else
+        {:ok, owner_pid} -> do_apply(owner_pid, module, fn_name, arity, args)
       end
     else
       raise Mimic.Error, module: module, fn_name: fn_name, arity: arity
+    end
+  end
+
+  defp resolve_lazy_allowance(caller_pids, module) do
+    case :ets.lookup(@lazy_modules_table, module) do
+      [_ | _] -> GenServer.call(__MODULE__, {:resolve_lazy, module, caller_pids})
+      [] -> :none
     end
   end
 
@@ -186,6 +201,7 @@ defmodule Mimic.Server do
 
   def init([]) do
     :ets.new(__MODULE__, [:named_table, :protected, :set])
+    :ets.new(@lazy_modules_table, [:named_table, :protected, :set])
     state = do_set_private_mode(%State{})
     {:ok, state}
   end
@@ -234,7 +250,28 @@ defmodule Mimic.Server do
 
     call_history = Map.delete(state.call_history, pid)
 
-    %{state | expectations: expectations, stubs: stubs, call_history: call_history}
+    removed_modules =
+      state.lazy_allowances
+      |> Enum.filter(fn {{owner_pid, _module}, _funs} -> owner_pid == pid end)
+      |> Enum.map(fn {{_owner_pid, module}, _funs} -> module end)
+
+    lazy_allowances =
+      state.lazy_allowances
+      |> Enum.reject(fn {{owner_pid, _module}, _funs} -> owner_pid == pid end)
+      |> Map.new()
+
+    for module <- removed_modules do
+      still_has_lazy? = Enum.any?(lazy_allowances, fn {{_owner_pid, m}, _funs} -> m == module end)
+      if not still_has_lazy?, do: :ets.delete(@lazy_modules_table, module)
+    end
+
+    %{
+      state
+      | expectations: expectations,
+        stubs: stubs,
+        call_history: call_history,
+        lazy_allowances: lazy_allowances
+    }
   end
 
   defp find_stub(stubs, module, fn_name, arity, caller) do
@@ -468,6 +505,33 @@ defmodule Mimic.Server do
     {:reply, {:error, :global}, state}
   end
 
+  def handle_call({:allow_lazy, module, owner_pid, fun}, _from, state = %State{mode: :private}) do
+    monitor_if_not_verify_on_exit(owner_pid, state.verify_on_exit)
+    :ets.insert(@lazy_modules_table, {module, true})
+
+    actual_owner =
+      case :ets.lookup(__MODULE__, {owner_pid, module}) do
+        [{{^owner_pid, ^module}, actual_owner_pid}] -> actual_owner_pid
+        [] -> owner_pid
+      end
+
+    lazy_allowances =
+      Map.update(state.lazy_allowances, {actual_owner, module}, [fun], &[fun | &1])
+
+    {:reply, {:ok, module}, %{state | lazy_allowances: lazy_allowances}}
+  end
+
+  def handle_call({:allow_lazy, _module, _owner_pid, _fun}, _from, state = %State{mode: :global}) do
+    {:reply, {:error, :global}, state}
+  end
+
+  def handle_call({:resolve_lazy, module, caller_pids}, _from, state) do
+    case find_lazy_owner(state.lazy_allowances, module, caller_pids) do
+      {:ok, owner_pid} -> {:reply, {:ok, owner_pid}, state}
+      :none -> {:reply, :none, state}
+    end
+  end
+
   def handle_call({:verify, pid}, _from, state) do
     expectations = state.expectations[pid] || %{}
 
@@ -487,7 +551,17 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:soft_reset, _module}, _from, state) do
-    state = %{state | expectations: %{}, stubs: %{}, mode: :private, global_pid: nil}
+    :ets.delete_all_objects(@lazy_modules_table)
+
+    state = %{
+      state
+      | expectations: %{},
+        stubs: %{},
+        mode: :private,
+        global_pid: nil,
+        lazy_allowances: %{}
+    }
+
     {:reply, :ok, state}
   end
 
@@ -687,5 +761,23 @@ defmodule Mimic.Server do
   defp do_set_private_mode(state) do
     :ets.insert(__MODULE__, {:mode, :private})
     %{state | global_pid: nil, mode: :private}
+  end
+
+  defp find_lazy_owner(lazy_allowances, module, caller_pids) do
+    Enum.find_value(lazy_allowances, :none, fn
+      {{owner_pid, ^module}, funs} ->
+        if any_pid_matches?(funs, caller_pids), do: {:ok, owner_pid}
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp any_pid_matches?(funs, caller_pids) do
+    Enum.any?(funs, fn fun ->
+      fun.()
+      |> List.wrap()
+      |> Enum.any?(&(&1 in caller_pids))
+    end)
   end
 end
