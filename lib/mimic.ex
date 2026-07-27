@@ -312,8 +312,10 @@ defmodule Mimic do
 
     * `module` - the copied module.
     * `owner_pid` - the process ID of the process which created the stub.
-    * `allowed_pid` - the process ID of the process which should also be allowed
-      to use this stub.
+    * `allowed_pid_or_fun` - the process ID of the process which should also be
+      allowed to use this stub, or a zero-arity function to resolve allowed pids
+      lazily at time of invocation. If a function is provided, it must return a
+      pid, a list of pids, or `nil`.
 
   ## Raises:
 
@@ -338,9 +340,34 @@ defmodule Mimic do
     |> Task.await
   end
   ```
+
+  ## Lazy (deferred) allowances
+
+  If the process you want to allow doesn't exist yet at the time you set up
+  expectations, you can pass a function instead of a pid. The function will be
+  called on each mock invocation to determine whether the caller is allowed.
+
+  ```elixir
+  test "allows a process that starts later" do
+    Calculator
+    |> expect(:add, fn x, y -> x + y end)
+    |> allow(self(), fn -> GenServer.whereis(MyServer) end)
+
+    start_supervised!(MyServer)
+    # MyServer can now call Calculator.add and hit the expectation
+  end
+  ```
   """
-  @spec allow(module(), pid(), pid()) :: module() | {:error, atom()}
-  def allow(module, owner_pid, allowed_pid) do
+  @spec allow(module(), pid(), pid() | (-> pid() | [pid()] | nil)) :: module() | {:error, atom()}
+  def allow(module, owner_pid, allowed_pid_or_fun)
+
+  def allow(module, owner_pid, fun) when is_function(fun, 0) do
+    module
+    |> Coordinator.allow_lazy(owner_pid, fun)
+    |> validate_server_response(:allow)
+  end
+
+  def allow(module, owner_pid, allowed_pid) when is_pid(allowed_pid) do
     module
     |> Coordinator.allow(owner_pid, allowed_pid)
     |> validate_server_response(:allow)

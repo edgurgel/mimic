@@ -26,6 +26,9 @@ defmodule Mimic.Server do
   # Shared allowances/mode table owned by Mimic.Coordinator
   @table Mimic.Coordinator
 
+  # Fast-path lookup to avoid a GenServer call when no lazy allowances exist for a module
+  @lazy_modules_table :lazy_modules
+
   defp shard(pid), do: {:via, PartitionSupervisor, {Mimic.Server.Partitions, pid}}
 
   @spec verify(pid) :: [{{module, atom, non_neg_integer}, non_neg_integer, non_neg_integer}]
@@ -102,15 +105,26 @@ defmodule Mimic.Server do
     if function_exported?(original_module, fn_name, arity) do
       caller_pids = [self() | Process.get(:"$callers", [])]
 
-      case allowed_pid(caller_pids, module) do
+      with :none <- allowed_pid(caller_pids, module),
+           :none <- resolve_lazy_allowance(caller_pids, module) do
+        apply_original(module, fn_name, args)
+      else
         {:ok, owner_pid} ->
           do_apply(owner_pid, module, fn_name, arity, args)
 
-        _ ->
-          apply_original(module, fn_name, args)
+        {:error, {:invalid_lazy_result, value}} ->
+          raise ArgumentError,
+                "lazy allowance callback passed to allow/3 must return a pid, a list of pids, or nil, got: #{inspect(value)}"
       end
     else
       raise Mimic.Error, module: module, fn_name: fn_name, arity: arity
+    end
+  end
+
+  defp resolve_lazy_allowance(caller_pids, module) do
+    case :ets.lookup(@lazy_modules_table, module) do
+      [_ | _] -> Coordinator.resolve_lazy(module, caller_pids)
+      [] -> :none
     end
   end
 
