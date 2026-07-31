@@ -159,26 +159,25 @@ defmodule Mimic.Server do
 
   defp allowed_pid(pids, module) do
     case :ets.lookup(__MODULE__, :mode) do
-      [{:mode, :private}] ->
-        match = match_spec(pids, module)
-
-        case :ets.select(__MODULE__, match) do
-          [] -> :none
-          [owner_pid | _] -> {:ok, owner_pid}
-        end
-
-      [{:mode, :global, global_pid}] ->
-        case :ets.lookup(__MODULE__, {global_pid, module}) do
-          [] -> :none
-          [{{^global_pid, ^module}, owner_pid}] -> {:ok, owner_pid}
-        end
+      [{:mode, :private}] -> find_owner(pids, module)
+      [{:mode, :global, global_pid}] -> find_owner([global_pid], module)
     end
   end
 
-  defp match_spec(pids, module) do
-    guards = Enum.map(pids, fn pid -> {:==, :"$1", pid} end)
-    orelse = List.to_tuple([:orelse | guards])
-    [{{{:"$1", module}, :"$2"}, [orelse], [:"$2"]}]
+  # We recursively try to find one of the given PIDs which owns the
+  # given module. We do this instead of, say, building a match spec
+  # because this is significantly more performant. With ~10k ownership
+  # rows in ETS, this takes ~500µs with a match spec and < ~10µs for common
+  # cases with this recursive lookup.
+  defp find_owner(_pids = [], _module) do
+    :none
+  end
+
+  defp find_owner([pid | pids], module) do
+    case :ets.lookup(__MODULE__, {pid, module}) do
+      [] -> find_owner(pids, module)
+      [{{^pid, ^module}, owner_pid}] -> {:ok, owner_pid}
+    end
   end
 
   def start_link(_) do
