@@ -194,6 +194,22 @@ defmodule Mimic.Test do
       assert_receive :ok
     end
 
+    test "prefers the current process stub over caller stubs" do
+      stub(Calculator, :add, fn _, _ -> @stubbed end)
+
+      results =
+        for _ <- 1..100 do
+          Task.async(fn ->
+            stub(Calculator, :add, fn _, _ -> @expected end)
+            Calculator.add(1, 2)
+          end)
+          |> Task.await()
+        end
+
+      assert Enum.uniq(results) == [@expected]
+      assert Calculator.add(1, 2) == @stubbed
+    end
+
     test "does not fail verification if not called" do
       stub(Calculator, :add, fn x, y -> x + y end)
       verify!()
