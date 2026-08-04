@@ -1297,6 +1297,33 @@ defmodule Mimic.Test do
     end
   end
 
+  describe "verify_on_exit!/1" do
+    setup :set_mimic_private
+
+    test "cleans up when exit verification raises" do
+      # This process stands in for an ExUnit test process. Registering it with
+      # ExUnit allows verify_on_exit!/0 to install its real on-exit callback.
+      {test_pid, monitor_ref} =
+        spawn_monitor(fn ->
+          ExUnit.OnExitHandler.register(self())
+          verify_on_exit!()
+
+          # Leave an expectation pending so verification raises on exit.
+          expect(Calculator, :add, fn x, y -> x + y end)
+        end)
+
+      assert_receive {:DOWN, ^monitor_ref, :process, ^test_pid, :normal}
+
+      # Run the registered callback manually so its expected verification error
+      # can be asserted without failing this test.
+      assert {:error, %Mimic.VerificationError{}, _stacktrace} =
+               ExUnit.OnExitHandler.run(test_pid, 1_000)
+
+      # The callback cleaned up the pending expectation even though verification raised.
+      assert Mimic.Server.verify(test_pid) == []
+    end
+  end
+
   describe "set_mimic_global/1" do
     test "raises if the test case is async" do
       message = ~r/Mimic cannot be set to global mode when the ExUnit case is async/

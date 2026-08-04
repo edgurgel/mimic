@@ -436,8 +436,11 @@ defmodule Mimic do
     Server.verify_on_exit(pid)
 
     Callbacks.on_exit(Mimic, fn ->
-      verify!(pid)
-      Server.exit(pid)
+      try do
+        verify!(pid)
+      after
+        Server.exit(pid)
+      end
     end)
   end
 
