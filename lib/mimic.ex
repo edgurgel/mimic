@@ -488,7 +488,7 @@ defmodule Mimic do
   """
   @spec verify!(pid()) :: :ok
   def verify!(pid \\ self()) do
-    pending = Server.verify(pid)
+    {pending, assertion_failures} = Server.verify(pid)
 
     messages =
       for {{module, name, arity}, num_calls, num_applied_calls} <- pending do
@@ -498,12 +498,17 @@ defmodule Mimic do
           "but it has been called #{num_applied_calls} time(s)"
       end
 
-    if messages != [] do
-      raise VerificationError,
-            "error while verifying mocks for #{inspect(pid)}:\n\n" <> Enum.join(messages, "\n")
-    end
+    case assertion_failures do
+      [{error, stacktrace} | _] ->
+        reraise error, stacktrace
 
-    :ok
+      [] when messages != [] ->
+        raise VerificationError,
+              "error while verifying mocks for #{inspect(pid)}:\n\n" <> Enum.join(messages, "\n")
+
+      [] ->
+        :ok
+    end
   end
 
   @doc "Returns the current mode (`:global` or `:private`)"

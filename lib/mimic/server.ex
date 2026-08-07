@@ -14,7 +14,8 @@ defmodule Mimic.Server do
               modules_to_be_copied: MapSet.new(),
               reset_tasks: %{},
               modules_opts: %{},
-              call_history: %{}
+              call_history: %{},
+              assertion_failures: %{}
   end
 
   defmodule Expectation do
@@ -29,7 +30,7 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:allow, module, owner_pid, allowed_pid})
   end
 
-  @spec verify(pid) :: non_neg_integer
+  @spec verify(pid) :: {list(), list()}
   def verify(pid) do
     GenServer.call(__MODULE__, {:verify, pid}, @long_timeout)
   end
@@ -134,7 +135,20 @@ defmodule Mimic.Server do
   defp do_apply(owner_pid, module, fn_name, arity, args) do
     case GenServer.call(__MODULE__, {:apply, owner_pid, module, fn_name, arity, args}, :infinity) do
       {:ok, func} ->
-        Kernel.apply(func, args)
+        try do
+          Kernel.apply(func, args)
+        rescue
+          error in ExUnit.AssertionError ->
+            if self() != owner_pid do
+              GenServer.call(
+                __MODULE__,
+                {:assertion_failure, owner_pid, error, __STACKTRACE__},
+                @long_timeout
+              )
+            end
+
+            reraise error, __STACKTRACE__
+        end
 
       :original ->
         apply_original(module, fn_name, args)
@@ -220,6 +234,7 @@ defmodule Mimic.Server do
   defp clear_data_from_pid(pid, state) do
     expectations = Map.delete(state.expectations, pid)
     stubs = Map.delete(state.stubs, pid)
+    assertion_failures = Map.delete(state.assertion_failures, pid)
 
     select = [{{{pid, :_}}, [], [true]}, {{{:_, :_}, pid}, [], [true]}]
 
@@ -234,7 +249,13 @@ defmodule Mimic.Server do
 
     call_history = Map.delete(state.call_history, pid)
 
-    %{state | expectations: expectations, stubs: stubs, call_history: call_history}
+    %{
+      state
+      | expectations: expectations,
+        stubs: stubs,
+        call_history: call_history,
+        assertion_failures: assertion_failures
+    }
   end
 
   defp find_stub(stubs, module, fn_name, arity, caller) do
@@ -479,7 +500,18 @@ defmodule Mimic.Server do
         {{module, fn_name, arity}, expectation.num_calls, expectation.num_applied_calls}
       end
 
-    {:reply, pending, state}
+    assertion_failures = state.assertion_failures[pid] || []
+
+    {:reply, {pending, assertion_failures}, state}
+  end
+
+  def handle_call({:assertion_failure, owner_pid, error, stacktrace}, _from, state) do
+    assertion_failures =
+      Map.update(state.assertion_failures, owner_pid, [{error, stacktrace}], fn failures ->
+        failures ++ [{error, stacktrace}]
+      end)
+
+    {:reply, :ok, %{state | assertion_failures: assertion_failures}}
   end
 
   def handle_call({:verify_on_exit, pid}, _from, state) do
@@ -487,7 +519,15 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:soft_reset, _module}, _from, state) do
-    state = %{state | expectations: %{}, stubs: %{}, mode: :private, global_pid: nil}
+    state = %{
+      state
+      | expectations: %{},
+        stubs: %{},
+        mode: :private,
+        global_pid: nil,
+        assertion_failures: %{}
+    }
+
     {:reply, :ok, state}
   end
 
