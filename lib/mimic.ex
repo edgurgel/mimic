@@ -83,7 +83,7 @@ defmodule Mimic do
   ```
   """
   alias ExUnit.Callbacks
-  alias Mimic.{Server, VerificationError}
+  alias Mimic.{Coordinator, Server, VerificationError}
 
   @doc false
   defmacro __using__(_opts \\ []) do
@@ -366,11 +366,11 @@ defmodule Mimic do
   def copy(module, opts \\ []) do
     with :ok <- ensure_module_not_copied(module),
          {:module, module} <- Code.ensure_compiled(module),
-         :ok <- Mimic.Server.mark_to_copy(module, opts) do
+         :ok <- Coordinator.mark_to_copy(module, opts) do
       if repeat_until_failure?() do
-        ExUnit.after_suite(fn _ -> Mimic.Server.soft_reset(module) end)
+        ExUnit.after_suite(fn _ -> Coordinator.soft_reset(module) end)
       else
-        ExUnit.after_suite(fn _ -> Mimic.Server.reset(module) end)
+        ExUnit.after_suite(fn _ -> Coordinator.reset(module) end)
       end
 
       :ok
@@ -452,7 +452,7 @@ defmodule Mimic do
   ```
   """
   @spec set_mimic_private(map()) :: :ok
-  def set_mimic_private(_context \\ %{}), do: Server.set_private_mode()
+  def set_mimic_private(_context \\ %{}), do: Coordinator.set_private_mode()
 
   @doc """
   Sets the mode to global. Mocks can be set and used by all processes
@@ -469,7 +469,7 @@ defmodule Mimic do
             "If you want to use Mimic in global mode, remove \"async: true\" when using ExUnit.Case"
   end
 
-  def set_mimic_global(_context), do: Server.set_global_mode(self())
+  def set_mimic_global(_context), do: Coordinator.set_global_mode(self())
 
   @doc """
   Chooses the mode based on ExUnit context. If `async` is `true` then
@@ -509,7 +509,7 @@ defmodule Mimic do
   @doc "Returns the current mode (`:global` or `:private`)"
   @spec mode() :: :private | :global
   def mode do
-    Server.get_mode()
+    Coordinator.get_mode()
   end
 
   @doc """
@@ -592,7 +592,7 @@ defmodule Mimic do
   end
 
   defp ensure_module_not_copied(module) do
-    case Server.marked_to_copy?(module) do
+    case Coordinator.marked_to_copy?(module) do
       false -> :ok
       true -> {:error, {:module_already_copied, module}}
     end
