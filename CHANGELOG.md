@@ -1,3 +1,10 @@
+# 2.3.1 (2026-08-07)
+
+* fix: verify_on_exit! cleans up even when it raises by @grantwest in #117
+* fix: improve owner lookup performance by @whatyouhide in #118
+* docs: fix reject documentation wording by @yosinn1-blip in #114
+* docs: fix reference to allow/3 by @ftes in #113
+
 # 2.3.0 (2026-01-17)
 
 * fix: namespace auto setup verify_on_exit! by @PragTob in #111
