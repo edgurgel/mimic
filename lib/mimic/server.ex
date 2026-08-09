@@ -107,7 +107,8 @@ defmodule Mimic.Server do
     GenServer.call(__MODULE__, {:marked_to_copy?, module}, @long_timeout)
   end
 
-  @spec get_calls(module, atom, arity) :: {:ok, list(list(term))} | {:error, :not_found}
+  @spec get_calls(module, atom, arity) ::
+          {:ok, list(list(term))} | {:error, {:module_not_copied, module}}
   def get_calls(module, fn_name, arity) do
     GenServer.call(__MODULE__, {:get_calls, {module, fn_name, arity}, self()})
   end

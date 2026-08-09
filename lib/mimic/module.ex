@@ -17,7 +17,7 @@ defmodule Mimic.Module do
     :ok
   end
 
-  @spec replace!(module, keyword) :: :ok | {:cover.file(), binary}
+  @spec replace!(module, keyword) :: :ok | {:file.filename(), binary}
   def replace!(module, opts) do
     backup_module = original(module)
 
