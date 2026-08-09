@@ -1,3 +1,8 @@
+# Unreleased
+
+* perf: shard `Mimic.Server` into one partition per scheduler (routed by owner
+  pid) so concurrent async tests no longer serialize through a single process
+
 # 2.3.1 (2026-08-07)
 
 * fix: verify_on_exit! cleans up even when it raises by @grantwest in #117
