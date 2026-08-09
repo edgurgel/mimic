@@ -12,7 +12,11 @@ defmodule Mimic.Coordinator do
     defstruct modules_beam: %{},
               modules_to_be_copied: MapSet.new(),
               modules_opts: %{},
-              reset_tasks: %{}
+              reset_tasks: %{},
+              # ref => module for copies currently running in a Task
+              copy_tasks: %{},
+              # module => [GenServer from] waiting on that module's in-flight copy
+              copy_waiters: %{}
   end
 
   @long_timeout Application.compile_env(:mimic, :server_timeout, 60_000)
@@ -78,10 +82,24 @@ defmodule Mimic.Coordinator do
     {:ok, %State{}}
   end
 
-  def handle_call({:ensure_copied, module}, _from, state) do
-    case ensure_module_copied(module, state) do
-      {:ok, state} -> {:reply, :ok, state}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+  def handle_call({:ensure_copied, module}, from, state) do
+    cond do
+      Mimic.Module.copied?(module) ->
+        {:reply, :ok, state}
+
+      Map.has_key?(state.copy_waiters, module) ->
+        # A copy for this module is already running — ride along and get replied
+        # when it lands. One copy, many waiters.
+        waiters = Map.update!(state.copy_waiters, module, &[from | &1])
+        {:noreply, %{state | copy_waiters: waiters}}
+
+      MapSet.member?(state.modules_to_be_copied, module) ->
+        # Offload the recompile to a Task so the Coordinator keeps serving other
+        # messages; `from` is answered via GenServer.reply when the Task finishes.
+        {:noreply, start_copy(module, from, state)}
+
+      true ->
+        {:reply, {:error, {:module_not_copied, module}}, state}
     end
   end
 
@@ -153,14 +171,28 @@ defmodule Mimic.Coordinator do
 
       state =
         if Cover.enabled_for?(module) do
-          {:ok, state} = ensure_module_copied(module, state)
-          state
+          copy_inline(module, state)
         else
           state
         end
 
       {:reply, :ok, state}
     end
+  end
+
+  # Copy task finished. `result` is Mimic.Module.replace!/2's return: `:ok` or
+  # `{beam_file, coverdata_path}`. Guarded so reset-task `:ok` messages fall
+  # through to the clause below.
+  def handle_info({ref, result}, state) when is_map_key(state.copy_tasks, ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, finish_copy(ref, {:ok, result}, state)}
+  end
+
+  # Copy task crashed before returning — surface the failure to its waiters
+  # rather than leaving them blocked until their call times out.
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state)
+      when is_map_key(state.copy_tasks, ref) do
+    {:noreply, finish_copy(ref, {:crash, reason}, state)}
   end
 
   # Reset task has successfully finished
@@ -194,6 +226,72 @@ defmodule Mimic.Coordinator do
     case state.modules_beam[module] do
       {beam, coverdata} -> Cover.clear_module_and_import_coverdata!(module, beam, coverdata)
       _ -> Mimic.Module.clear!(module)
+    end
+  end
+
+  # Spawn an async copy for `module`, registering `from` as its first waiter.
+  # The Task runs the recompile off the Coordinator's main loop; its result comes
+  # back as a message handled by handle_info/2.
+  defp start_copy(module, from, state) do
+    opts = Map.get(state.modules_opts, module, [])
+
+    # 0 -> 1: enable ignore_module_conflict for as long as any copy is in flight,
+    # so every concurrent copy's `create_mock` redefinition compiles cleanly.
+    if map_size(state.copy_tasks) == 0 do
+      Code.compiler_options(ignore_module_conflict: true)
+    end
+
+    task =
+      Task.Supervisor.async_nolink(Mimic.TaskSupervisor, fn ->
+        Mimic.Module.replace!(module, opts)
+      end)
+
+    %{
+      state
+      | copy_tasks: Map.put(state.copy_tasks, task.ref, module),
+        copy_waiters: Map.put(state.copy_waiters, module, [from])
+    }
+  end
+
+  # A copy task settled (success or crash): update state, reply every waiter, and
+  # drop the conflict flag once no copies remain in flight.
+  defp finish_copy(ref, outcome, state) do
+    {module, copy_tasks} = Map.pop(state.copy_tasks, ref)
+    {waiters, copy_waiters} = Map.pop(state.copy_waiters, module, [])
+
+    {reply, modules_beam} =
+      case outcome do
+        {:ok, {beam_file, coverdata_path}} ->
+          {:ok, Map.put(state.modules_beam, module, {beam_file, coverdata_path})}
+
+        {:ok, :ok} ->
+          {:ok, state.modules_beam}
+
+        {:crash, reason} ->
+          {{:error, {:copy_failed, module, reason}}, state.modules_beam}
+      end
+
+    Enum.each(waiters, &GenServer.reply(&1, reply))
+
+    # 1 -> 0: no copies left, restore the compiler default.
+    if map_size(copy_tasks) == 0 do
+      Code.compiler_options(ignore_module_conflict: false)
+    end
+
+    %{state | copy_tasks: copy_tasks, copy_waiters: copy_waiters, modules_beam: modules_beam}
+  end
+
+  # Synchronous copy used by the cover-eager mark_to_copy path. Holds the conflict
+  # flag on for the duration, then restores it to whatever in-flight async copies
+  # still require (never clobbers a concurrent copy's flag).
+  defp copy_inline(module, state) do
+    Code.compiler_options(ignore_module_conflict: true)
+
+    try do
+      {:ok, new_state} = ensure_module_copied(module, state)
+      new_state
+    after
+      Code.compiler_options(ignore_module_conflict: map_size(state.copy_tasks) > 0)
     end
   end
 

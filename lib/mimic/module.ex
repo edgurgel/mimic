@@ -35,9 +35,12 @@ defmodule Mimic.Module do
       end
 
     rename_module(module, backup_module)
-    Code.compiler_options(ignore_module_conflict: true)
+    # `create_mock` redefines `module`, which the compiler would reject as a
+    # module conflict. The caller (Mimic.Coordinator) keeps `ignore_module_conflict`
+    # enabled for the whole duration of any in-flight copy so this — and any
+    # sibling copy running concurrently in another task — compiles cleanly. See
+    # Mimic.Coordinator's copy_tasks refcount.
     create_mock(module, Map.new(opts))
-    Code.compiler_options(ignore_module_conflict: false)
 
     result
   end
