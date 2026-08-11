@@ -283,28 +283,18 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:stub, module, fn_name, func, arity, owner}, _from, state) do
-    if valid_mode?(owner) do
+    register_owner(owner, module, state, fn ->
       func = maybe_typecheck_func(module, fn_name, func)
-      monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
 
-      :ets.insert_new(@table, {{owner, module}, owner})
-
-      {:reply, {:ok, module},
-       %{
-         state
-         | stubs: put_in(state.stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func)
-       }}
-    else
-      {:reply, {:error, :not_global_owner}, state}
-    end
+      %{
+        state
+        | stubs: put_in(state.stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func)
+      }
+    end)
   end
 
   def handle_call({:stub, module, owner}, _from, state) do
-    if valid_mode?(owner) do
-      monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
-
-      :ets.insert_new(@table, {{owner, module}, owner})
-
+    register_owner(owner, module, state, fn ->
       internal_functions = [__info__: 1, module_info: 0, module_info: 1]
 
       stubs =
@@ -315,18 +305,12 @@ defmodule Mimic.Server do
           put_in(stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func)
         end)
 
-      {:reply, {:ok, module}, %{state | stubs: stubs}}
-    else
-      {:reply, {:error, :not_global_owner}, state}
-    end
+      %{state | stubs: stubs}
+    end)
   end
 
   def handle_call({:stub_with, mocked_module, mocking_module, owner}, _from, state) do
-    if valid_mode?(owner) do
-      monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
-
-      :ets.insert_new(@table, {{owner, mocked_module}, owner})
-
+    register_owner(owner, mocked_module, state, fn ->
       original_module = Mimic.Module.original(mocked_module)
 
       internal_functions = [__info__: 1, module_info: 0, module_info: 1]
@@ -362,18 +346,13 @@ defmodule Mimic.Server do
           put_in(stubs, [Access.key(owner, %{}), {mocked_module, fn_name, arity}], func)
         end)
 
-      {:reply, {:ok, mocked_module}, %{state | stubs: stubs}}
-    else
-      {:reply, {:error, :not_global_owner}, state}
-    end
+      %{state | stubs: stubs}
+    end)
   end
 
   def handle_call({:expect, {module, fn_name, func, arity}, num_calls, owner}, _from, state) do
-    if valid_mode?(owner) do
+    register_owner(owner, module, state, fn ->
       func = maybe_typecheck_func(module, fn_name, func)
-      monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
-
-      :ets.insert_new(@table, {{owner, module}, owner})
 
       expectation = %Expectation{func: func, num_calls: num_calls}
 
@@ -384,10 +363,8 @@ defmodule Mimic.Server do
           &((&1 || []) ++ [expectation])
         )
 
-      {:reply, {:ok, module}, %{state | expectations: expectations}}
-    else
-      {:reply, {:error, :not_global_owner}, state}
-    end
+      %{state | expectations: expectations}
+    end)
   end
 
   def handle_call({:allow, module, owner_pid, allowed_pid}, _from, state) do
@@ -464,6 +441,23 @@ defmodule Mimic.Server do
 
       true ->
         {:unexpected, expectation.num_calls, expectation.num_applied_calls + 1}
+    end
+  end
+
+  # Shared scaffolding for the stub/stub_with/expect handlers: gate on the
+  # current mode, monitor the owner, register its ownership row, then run
+  # `build_state` (which computes the stubs/expectations for this owner) and
+  # reply. Keeping this in one place means the mode/ownership atomicity fixes
+  # land here rather than in four near-identical clauses.
+  defp register_owner(owner, module, state, build_state) do
+    if valid_mode?(owner) do
+      monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
+
+      :ets.insert_new(@table, {{owner, module}, owner})
+
+      {:reply, {:ok, module}, build_state.()}
+    else
+      {:reply, {:error, :not_global_owner}, state}
     end
   end
 
