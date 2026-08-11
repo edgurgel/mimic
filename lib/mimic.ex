@@ -368,7 +368,7 @@ defmodule Mimic do
          {:module, module} <- Code.ensure_compiled(module),
          :ok <- Coordinator.mark_to_copy(module, opts) do
       if repeat_until_failure?() do
-        ExUnit.after_suite(fn _ -> Coordinator.soft_reset(module) end)
+        Coordinator.register_soft_reset()
       else
         ExUnit.after_suite(fn _ -> Coordinator.reset(module) end)
       end

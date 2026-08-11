@@ -16,7 +16,9 @@ defmodule Mimic.Coordinator do
               # ref => module for copies currently running in a Task
               copy_tasks: %{},
               # module => [GenServer from] waiting on that module's in-flight copy
-              copy_waiters: %{}
+              copy_waiters: %{},
+              # whether the suite-end soft_reset hook has been registered
+              soft_reset_registered: false
   end
 
   @long_timeout Application.compile_env(:mimic, :server_timeout, 60_000)
@@ -66,9 +68,17 @@ defmodule Mimic.Coordinator do
     GenServer.call(__MODULE__, {:reset, module}, @long_timeout)
   end
 
-  @spec soft_reset(module) :: :ok
-  def soft_reset(module) do
-    GenServer.call(__MODULE__, {:soft_reset, module}, @long_timeout)
+  @spec soft_reset() :: :ok
+  def soft_reset do
+    GenServer.call(__MODULE__, :soft_reset, @long_timeout)
+  end
+
+  # Registers the single suite-end `soft_reset` hook, idempotently. `Mimic.copy/2`
+  # is called once per copied module, but soft_reset wipes all partitions globally,
+  # so we only ever need one after_suite callback regardless of module count.
+  @spec register_soft_reset() :: :ok
+  def register_soft_reset do
+    GenServer.call(__MODULE__, :register_soft_reset, @long_timeout)
   end
 
   def start_link(_) do
@@ -113,13 +123,25 @@ defmodule Mimic.Coordinator do
     {:reply, :ok, state}
   end
 
-  def handle_call({:soft_reset, _module}, _from, state) do
-    Enum.each(server_partitions(), fn pid ->
-      GenServer.call(pid, :soft_reset, @long_timeout)
-    end)
+  def handle_call(:soft_reset, _from, state) do
+    server_partitions()
+    |> Task.async_stream(
+      fn pid -> GenServer.call(pid, :soft_reset, @long_timeout) end,
+      ordered: false,
+      timeout: @long_timeout
+    )
+    |> Stream.run()
 
     :ets.insert(@table, {:mode, :private})
     {:reply, :ok, state}
+  end
+
+  def handle_call(:register_soft_reset, _from, state) do
+    unless state.soft_reset_registered do
+      ExUnit.after_suite(fn _ -> soft_reset() end)
+    end
+
+    {:reply, :ok, %{state | soft_reset_registered: true}}
   end
 
   def handle_call({:reset, module}, _from, state) do
