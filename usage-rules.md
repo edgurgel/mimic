@@ -28,7 +28,7 @@ ExUnit.start()
 defmodule MyTest do
   use ExUnit.Case, async: true
   use Mimic  # or use Mimic.DSL
-  
+
   # tests here
 end
 ```
@@ -49,7 +49,7 @@ Calculator
 |> expect(:add, fn x, y -> x + y end)
 
 # Multiple calls expectation
-Calculator  
+Calculator
 |> expect(:add, 3, fn x, y -> x + y end)
 
 # Chaining expectations (FIFO order)
@@ -111,7 +111,7 @@ reject(Calculator, :dangerous_operation, 1)
 setup :set_mimic_private
 setup :verify_on_exit!
 
-# Global mode (when needed)  
+# Global mode (when needed)
 setup :set_mimic_global
 # Remember: async: false required
 ```
@@ -139,9 +139,9 @@ end
 ```elixir
 test "multi-process test" do
   Calculator |> expect(:add, fn x, y -> x + y end)
-  
+
   parent_pid = self()
-  
+
   spawn_link(fn ->
     Calculator |> allow(parent_pid, self())
     assert Calculator.add(1, 2) == 3
@@ -149,7 +149,32 @@ test "multi-process test" do
 end
 ```
 
-### **IMPORTANT**: Task Automatic Allowance  
+### Using `allow/3` with Lazy (Deferred) Allowances
+
+When the process you want to allow doesn't exist yet at the time you set up
+expectations, pass a zero-arity function instead of a pid. The function is
+called on each mock invocation to determine whether the caller is allowed,
+so it handles dynamic process pools where pids change over time.
+
+```elixir
+test "allows a process that starts later" do
+  Calculator
+  |> expect(:add, fn x, y -> x + y end)
+  |> allow(self(), fn -> GenServer.whereis(MyServer) end)
+
+  start_supervised!(MyServer)
+  # MyServer can now call Calculator.add and hit the expectation
+end
+```
+
+**Key behaviors:**
+
+- Returns `nil` → falls through to the original implementation (no error)
+- Returns a single pid → that pid is allowed
+- Returns a list of pids → all are allowed
+- The function is called on each mock invocation to determine whether the caller is allowed
+
+### **IMPORTANT**: Task Automatic Allowance
 
 - Tasks automatically inherit parent process mocks
 - No need to call `allow/3` for `Task.async`
@@ -183,7 +208,7 @@ Mimic.copy(HTTPClient, type_check: true)
 
 ### Calling Original Implementation
 
-```elixir  
+```elixir
 call_original(Calculator, :add, [1, 2])  # Returns 3
 ```
 
@@ -220,7 +245,7 @@ setup :verify_on_exit!  # Auto-verify expectations
 Calculator
 |> stub(:add, fn _, _ -> :fallback end)      # Fallback after expectations
 |> expect(:add, fn _, _ -> :first end)       # First call
-|> expect(:add, fn _, _ -> :second end)      # Second call  
+|> expect(:add, fn _, _ -> :second end)      # Second call
 # Third call returns :fallback
 ```
 
