@@ -342,7 +342,7 @@ defmodule Mimic do
   @spec allow(module(), pid(), pid()) :: module() | {:error, atom()}
   def allow(module, owner_pid, allowed_pid) do
     module
-    |> Server.allow(owner_pid, allowed_pid)
+    |> Coordinator.allow(owner_pid, allowed_pid)
     |> validate_server_response(:allow)
   end
 

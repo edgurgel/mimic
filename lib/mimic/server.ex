@@ -28,11 +28,6 @@ defmodule Mimic.Server do
 
   defp shard(pid), do: {:via, PartitionSupervisor, {Mimic.Server.Partitions, pid}}
 
-  @spec allow(module, pid, pid) :: {:ok, module} | {:error, :global}
-  def allow(module, owner_pid, allowed_pid) do
-    GenServer.call(shard(owner_pid), {:allow, module, owner_pid, allowed_pid})
-  end
-
   @spec verify(pid) :: [{{module, atom, non_neg_integer}, non_neg_integer, non_neg_integer}]
   def verify(pid) do
     GenServer.call(shard(pid), {:verify, pid}, @long_timeout)
@@ -150,8 +145,14 @@ defmodule Mimic.Server do
 
   defp allowed_pid(pids, module) do
     case :ets.lookup(@table, :mode) do
-      [{:mode, :private}] -> find_owner(pids, module)
-      [{:mode, :global, global_pid}] -> find_owner([global_pid], module)
+      [{:mode, :private}] ->
+        find_owner(pids, module)
+
+      [{:mode, :global, global_pid}] ->
+        case find_owner([global_pid], module) do
+          {:ok, _owner_pid} -> {:ok, global_pid}
+          :none -> :none
+        end
     end
   end
 
@@ -207,9 +208,7 @@ defmodule Mimic.Server do
 
     :ets.select_delete(@table, select)
 
-    if match?([{:mode, :global, ^pid}], :ets.lookup(@table, :mode)) do
-      :ets.insert(@table, {:mode, :private})
-    end
+    Coordinator.clear_global_owner(pid)
 
     call_history = Map.delete(state.call_history, pid)
 
@@ -365,24 +364,6 @@ defmodule Mimic.Server do
 
       %{state | expectations: expectations}
     end)
-  end
-
-  def handle_call({:allow, module, owner_pid, allowed_pid}, _from, state) do
-    case :ets.lookup(@table, :mode) do
-      [{:mode, :private}] ->
-        case :ets.lookup(@table, {owner_pid, module}) do
-          [{{^owner_pid, ^module}, actual_owner_pid}] ->
-            :ets.insert(@table, {{allowed_pid, module}, actual_owner_pid})
-
-          [] ->
-            :ets.insert(@table, {{allowed_pid, module}, owner_pid})
-        end
-
-        {:reply, {:ok, module}, state}
-
-      [{:mode, :global, _global_pid}] ->
-        {:reply, {:error, :global}, state}
-    end
   end
 
   def handle_call({:verify, pid}, _from, state) do

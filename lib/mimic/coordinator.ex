@@ -40,6 +40,16 @@ defmodule Mimic.Coordinator do
     GenServer.call(__MODULE__, {:set_global_mode, owner_pid}, @long_timeout)
   end
 
+  @spec allow(module, pid, pid) :: {:ok, module} | {:error, :global}
+  def allow(module, owner_pid, allowed_pid) do
+    GenServer.call(__MODULE__, {:allow, module, owner_pid, allowed_pid}, @long_timeout)
+  end
+
+  @spec clear_global_owner(pid) :: :ok
+  def clear_global_owner(pid) do
+    GenServer.cast(__MODULE__, {:clear_global_owner, pid})
+  end
+
   @spec set_private_mode :: :ok
   def set_private_mode do
     GenServer.call(__MODULE__, :set_private_mode, @long_timeout)
@@ -123,6 +133,24 @@ defmodule Mimic.Coordinator do
     {:reply, :ok, state}
   end
 
+  def handle_call({:allow, module, owner_pid, allowed_pid}, _from, state) do
+    case :ets.lookup(@table, :mode) do
+      [{:mode, :private}] ->
+        case :ets.lookup(@table, {owner_pid, module}) do
+          [{{^owner_pid, ^module}, actual_owner_pid}] ->
+            :ets.insert(@table, {{allowed_pid, module}, actual_owner_pid})
+
+          [] ->
+            :ets.insert(@table, {{allowed_pid, module}, owner_pid})
+        end
+
+        {:reply, {:ok, module}, state}
+
+      [{:mode, :global, _global_pid}] ->
+        {:reply, {:error, :global}, state}
+    end
+  end
+
   def handle_call(:soft_reset, _from, state) do
     server_partitions()
     |> Task.async_stream(
@@ -200,6 +228,15 @@ defmodule Mimic.Coordinator do
 
       {:reply, :ok, state}
     end
+  end
+
+  def handle_cast({:clear_global_owner, pid}, state) do
+    case :ets.lookup(@table, :mode) do
+      [{:mode, :global, ^pid}] -> :ets.insert(@table, {:mode, :private})
+      _ -> :ok
+    end
+
+    {:noreply, state}
   end
 
   # Copy task finished. `result` is Mimic.Module.replace!/2's return: `:ok` or

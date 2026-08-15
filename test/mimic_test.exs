@@ -1013,6 +1013,28 @@ defmodule Mimic.Test do
     end
   end
 
+  describe "global mode dispatch with a stale allowance row" do
+    test "routes to the mode-row owner, not a stale allowance row's value" do
+      # A prior private-mode test can leave behind an allowance row keyed at
+      # what later becomes the global owner but whose *stored value* is a
+      # different owner.
+      set_mimic_private()
+      stale_owner = spawn_link(fn -> Process.sleep(:infinity) end)
+
+      assert Calculator == allow(Calculator, stale_owner, self())
+
+      # Go global with self() as the owner and set an expectation. The ownership
+      # row is written with insert_new, so the stale allowance row survives.
+      set_mimic_global()
+      Calculator |> expect(:add, fn _, _ -> 999_999 end)
+
+      # Dispatch must use self() (the pid in the :mode row), not stale_owner.
+      # Under the old code find_owner returned stale_owner's value and misrouted
+      # to a shard with no expectation, falling through to the original (3).
+      assert Calculator.add(1, 2) == 999_999
+    end
+  end
+
   describe "mode/0 private mode" do
     setup :set_mimic_private
 
