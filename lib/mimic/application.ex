@@ -4,9 +4,6 @@ defmodule Mimic.Application do
 
   def start(_, _) do
     children = [
-      # Runs module copies off the Coordinator's main loop. async_nolink keeps a
-      # failed copy from taking the Coordinator down with it.
-      {Task.Supervisor, name: Mimic.TaskSupervisor},
       Mimic.Coordinator,
       {PartitionSupervisor, child_spec: Mimic.Server, name: Mimic.Server.Partitions}
     ]
