@@ -79,7 +79,8 @@ defmodule Mimic.Server do
     GenServer.cast(shard(pid), {:exit, pid})
   end
 
-  @spec get_calls(module, atom, arity) :: {:ok, list(list(term))} | {:error, :not_found}
+  @spec get_calls(module, atom, arity) ::
+          {:ok, list(list(term))} | {:error, {:module_not_copied, module}}
   def get_calls(module, fn_name, arity) do
     with :ok <- Coordinator.ensure_copied(module) do
       caller_pids = [self() | Process.get(:"$callers", [])]

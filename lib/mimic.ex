@@ -378,12 +378,8 @@ defmodule Mimic do
       {:error, {:module_already_copied, _module}} ->
         :ok
 
-      {:error, reason}
-      when reason in [:embedded, :badfile, :nofile, :on_load_failure, :unavailable] ->
+      {:error, _reason} ->
         raise ArgumentError, "Module #{inspect(module)} is not available"
-
-      error ->
-        validate_server_response(error, :copy)
     end
   end
 
@@ -578,17 +574,12 @@ defmodule Mimic do
       [[1, 2]]
 
   """
-  @spec calls(module, atom, non_neg_integer) :: [[any]] | {:error, :atom}
+  @spec calls(module, atom, non_neg_integer) :: [[any]]
   def calls(module, function_name, arity) do
     raise_if_not_exported_function!(module, function_name, arity)
 
-    result =
-      Server.get_calls(module, function_name, arity)
-      |> validate_server_response(:calls)
-
-    with {:ok, calls} <- result do
-      calls
-    end
+    Server.get_calls(module, function_name, arity)
+    |> validate_server_response(:calls)
   end
 
   defp ensure_module_not_copied(module) do
@@ -650,10 +641,5 @@ defmodule Mimic do
   defp validate_server_response({:error, {:module_not_copied, module}}, _action) do
     raise ArgumentError,
           "Module #{inspect(module)} has not been copied. See docs for Mimic.copy/1"
-  end
-
-  defp validate_server_response(_, :copy) do
-    raise ArgumentError,
-          "Failed to copy module. See docs for Mimic.copy/1"
   end
 end
