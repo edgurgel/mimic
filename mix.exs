@@ -33,7 +33,7 @@ defmodule Mimic.Mixfile do
   defp deps do
     [
       {:ham, "~> 0.3"},
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.40.3", only: :dev, runtime: false},
       {:credo, "~> 1.0", only: :dev}
     ]
   end
@@ -59,7 +59,7 @@ defmodule Mimic.Mixfile do
       main: "readme",
       source_url: @source_url,
       source_ref: "v#{@version}",
-      formatters: ["html"]
+      formatters: ["html", "markdown"]
     ]
   end
 end
