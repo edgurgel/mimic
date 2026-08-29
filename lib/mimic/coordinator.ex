@@ -151,7 +151,7 @@ defmodule Mimic.Coordinator do
   def handle_call({:allow_lazy, module, owner_pid, fun}, _from, state) do
     case :ets.lookup(@table, :mode) do
       [{:mode, :private}] ->
-        Process.monitor(owner_pid)
+        monitor_lazy_owner(owner_pid)
         :ets.insert(@lazy_modules_table, {module, true})
 
         actual_owner =
@@ -320,6 +320,11 @@ defmodule Mimic.Coordinator do
       true ->
         {:error, {:module_not_copied, module}}
     end
+  end
+
+  defp monitor_lazy_owner(owner_pid) do
+    {:monitors, monitors} = Process.info(self(), :monitors)
+    if {:process, owner_pid} not in monitors, do: Process.monitor(owner_pid)
   end
 
   defp remove_lazy_allowances(pid, state) do

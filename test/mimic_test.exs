@@ -1100,6 +1100,31 @@ defmodule Mimic.Test do
       assert :counters.get(counter, 1) == 2
     end
 
+    test "does not create a duplicate monitor when the same owner allows with a function more than once" do
+      parent_pid = self()
+      coordinator_pid = Process.whereis(Mimic.Coordinator)
+
+      owner_pid =
+        spawn(fn ->
+          Calculator |> stub(:add, fn _, _ -> 1 end) |> allow(self(), fn -> nil end)
+          Counter |> stub(:inc, fn x -> x end) |> allow(self(), fn -> nil end)
+          send(parent_pid, :ready)
+
+          receive do
+            :done -> :ok
+          end
+        end)
+
+      assert_receive :ready
+
+      {:monitors, monitors} = Process.info(coordinator_pid, :monitors)
+      owner_monitor_count = Enum.count(monitors, fn {:process, pid} -> pid == owner_pid end)
+
+      send(owner_pid, :done)
+
+      assert owner_monitor_count == 1
+    end
+
     test "supports lazy allowances that return a list of pids" do
       parent_pid = self()
       name_a = :"lazy_list_a_#{System.unique_integer([:positive])}"
