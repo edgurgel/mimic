@@ -14,8 +14,7 @@ defmodule Mimic.Coordinator do
               modules_opts: %{},
               reset_tasks: %{},
               # whether the suite-end soft_reset hook has been registered
-              soft_reset_registered: false,
-              lazy_allowances: %{}
+              soft_reset_registered: false
   end
 
   @long_timeout Application.compile_env(:mimic, :server_timeout, 60_000)
@@ -23,7 +22,7 @@ defmodule Mimic.Coordinator do
   # Shared table holding owner allowances and the private/global mode flag.
   @table Mimic.Coordinator
 
-  # Fast-path lookup to avoid a GenServer call when no lazy allowances exist for a module
+  # Holds lazy allowances directly as {module, owner_pid, fun} rows, keyed by module.
   @lazy_modules_table :lazy_modules
 
   @spec ensure_copied(module) :: :ok | {:error, {:module_not_copied, module}}
@@ -48,11 +47,6 @@ defmodule Mimic.Coordinator do
   @spec allow_lazy(module, pid, (-> pid | [pid] | nil)) :: {:ok, module} | {:error, :global}
   def allow_lazy(module, owner_pid, fun) when is_function(fun, 0) do
     GenServer.call(__MODULE__, {:allow_lazy, module, owner_pid, fun}, @long_timeout)
-  end
-
-  @spec resolve_lazy(module, [pid]) :: {:ok, pid} | :none | {:error, {:invalid_lazy_result, term}}
-  def resolve_lazy(module, caller_pids) do
-    GenServer.call(__MODULE__, {:resolve_lazy, module, caller_pids}, @long_timeout)
   end
 
   @spec clear_global_owner(pid) :: :ok
@@ -107,7 +101,7 @@ defmodule Mimic.Coordinator do
 
   def init([]) do
     :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
-    :ets.new(@lazy_modules_table, [:named_table, :protected, :set, read_concurrency: true])
+    :ets.new(@lazy_modules_table, [:named_table, :protected, :bag, read_concurrency: true])
 
     :ets.insert(@table, {:mode, :private})
     {:ok, %State{}}
@@ -152,7 +146,6 @@ defmodule Mimic.Coordinator do
     case :ets.lookup(@table, :mode) do
       [{:mode, :private}] ->
         monitor_lazy_owner(owner_pid)
-        :ets.insert(@lazy_modules_table, {module, true})
 
         actual_owner =
           case :ets.lookup(@table, {owner_pid, module}) do
@@ -160,21 +153,12 @@ defmodule Mimic.Coordinator do
             [] -> owner_pid
           end
 
-        lazy_allowances =
-          Map.update(state.lazy_allowances, {actual_owner, module}, [fun], &[fun | &1])
+        :ets.insert(@lazy_modules_table, {module, actual_owner, fun})
 
-        {:reply, {:ok, module}, %{state | lazy_allowances: lazy_allowances}}
+        {:reply, {:ok, module}, state}
 
       [{:mode, :global, _global_pid}] ->
         {:reply, {:error, :global}, state}
-    end
-  end
-
-  def handle_call({:resolve_lazy, module, caller_pids}, _from, state) do
-    case find_lazy_owner(state.lazy_allowances, module, caller_pids) do
-      {:ok, owner_pid} -> {:reply, {:ok, owner_pid}, state}
-      {:error, _} = error -> {:reply, error, state}
-      :none -> {:reply, :none, state}
     end
   end
 
@@ -189,7 +173,7 @@ defmodule Mimic.Coordinator do
 
     :ets.delete_all_objects(@lazy_modules_table)
     :ets.insert(@table, {:mode, :private})
-    {:reply, :ok, %{state | lazy_allowances: %{}}}
+    {:reply, :ok, state}
   end
 
   def handle_call(:register_soft_reset, _from, state) do
@@ -277,7 +261,8 @@ defmodule Mimic.Coordinator do
 
   # DOWN from a completed reset task or an owner pid monitored via allow_lazy/3
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    {:noreply, remove_lazy_allowances(pid, state)}
+    remove_lazy_allowances(pid)
+    {:noreply, state}
   end
 
   def handle_info(msg, state) do
@@ -327,65 +312,7 @@ defmodule Mimic.Coordinator do
     if {:process, owner_pid} not in monitors, do: Process.monitor(owner_pid)
   end
 
-  defp remove_lazy_allowances(pid, state) do
-    removed_modules =
-      state.lazy_allowances
-      |> Enum.filter(fn {{owner_pid, _module}, _funs} -> owner_pid == pid end)
-      |> Enum.map(fn {{_owner_pid, module}, _funs} -> module end)
-
-    lazy_allowances =
-      state.lazy_allowances
-      |> Enum.reject(fn {{owner_pid, _module}, _funs} -> owner_pid == pid end)
-      |> Map.new()
-
-    for module <- removed_modules do
-      still_has_lazy? = Enum.any?(lazy_allowances, fn {{_owner_pid, m}, _funs} -> m == module end)
-      if not still_has_lazy?, do: :ets.delete(@lazy_modules_table, module)
-    end
-
-    %{state | lazy_allowances: lazy_allowances}
+  defp remove_lazy_allowances(pid) do
+    :ets.select_delete(@lazy_modules_table, [{{:_, pid, :_}, [], [true]}])
   end
-
-  defp find_lazy_owner(lazy_allowances, module, caller_pids) do
-    Enum.find_value(lazy_allowances, :none, fn
-      {{owner_pid, ^module}, funs} ->
-        case any_pid_matches?(funs, caller_pids) do
-          true -> {:ok, owner_pid}
-          false -> nil
-          {:error, _} = error -> error
-        end
-
-      _ ->
-        nil
-    end)
-  end
-
-  # Returns true, false, or {:error, _}
-  defp any_pid_matches?(funs, caller_pids) do
-    Enum.reduce_while(funs, false, fn fun, _acc ->
-      case lazy_fun_result(fun) do
-        {:error, _} = error -> {:halt, error}
-        pids -> if Enum.any?(pids, &(&1 in caller_pids)), do: {:halt, true}, else: {:cont, false}
-      end
-    end)
-  end
-
-  defp lazy_fun_result(fun) do
-    case fun.() do
-      nil -> []
-      pid when is_pid(pid) -> [pid]
-      pids when is_list(pids) -> validate_pids(pids)
-      other -> invalid_lazy_result(other)
-    end
-  end
-
-  defp validate_pids(pids) do
-    if Enum.all?(pids, &is_pid/1) do
-      pids
-    else
-      invalid_lazy_result(pids)
-    end
-  end
-
-  defp invalid_lazy_result(value), do: {:error, {:invalid_lazy_result, value}}
 end

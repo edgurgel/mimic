@@ -1175,7 +1175,7 @@ defmodule Mimic.Test do
       assert_receive {:raised, %ArgumentError{message: message}}
 
       assert message ==
-               "lazy allowance callback passed to allow/3 must return a pid, a list of pids, or nil, got: :not_a_pid"
+               "lazy allowance callback passed to allow/3 must return a pid or nil (or a list of those), got: :not_a_pid"
     end
 
     test "raises if the lazy function returns a list containing a non-pid" do
@@ -1196,7 +1196,7 @@ defmodule Mimic.Test do
       assert_receive {:raised, %ArgumentError{message: message}}
 
       assert message ==
-               "lazy allowance callback passed to allow/3 must return a pid, a list of pids, or nil, got: [#{inspect(parent_pid)}, :not_a_pid]"
+               "lazy allowance callback passed to allow/3 must return a pid or nil (or a list of those), got: [#{inspect(parent_pid)}, :not_a_pid]"
     end
 
     test "supports stubs" do
@@ -1246,7 +1246,7 @@ defmodule Mimic.Test do
 
       :timer.sleep(1)
 
-      assert Mimic.Coordinator.resolve_lazy(Calculator, [allowed_pid]) == :none
+      assert :ets.match(:lazy_modules, {Calculator, owner_pid, :_}) == []
 
       # After owner dies, lazy allowance should be gone — calls fall through to original
       send(allowed_pid, :call_add)

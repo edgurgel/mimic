@@ -26,7 +26,7 @@ defmodule Mimic.Server do
   # Shared allowances/mode table owned by Mimic.Coordinator
   @table Mimic.Coordinator
 
-  # Fast-path lookup to avoid a GenServer call when no lazy allowances exist for a module
+  # Owned by Mimic.Coordinator, but read directly here
   @lazy_modules_table :lazy_modules
 
   defp shard(pid), do: {:via, PartitionSupervisor, {Mimic.Server.Partitions, pid}}
@@ -109,12 +109,7 @@ defmodule Mimic.Server do
            :none <- resolve_lazy_allowance(caller_pids, module) do
         apply_original(module, fn_name, args)
       else
-        {:ok, owner_pid} ->
-          do_apply(owner_pid, module, fn_name, arity, args)
-
-        {:error, {:invalid_lazy_result, value}} ->
-          raise ArgumentError,
-                "lazy allowance callback passed to allow/3 must return a pid, a list of pids, or nil, got: #{inspect(value)}"
+        {:ok, owner_pid} -> do_apply(owner_pid, module, fn_name, arity, args)
       end
     else
       raise Mimic.Error, module: module, fn_name: fn_name, arity: arity
@@ -122,9 +117,32 @@ defmodule Mimic.Server do
   end
 
   defp resolve_lazy_allowance(caller_pids, module) do
-    case :ets.lookup(@lazy_modules_table, module) do
-      [_ | _] -> Coordinator.resolve_lazy(module, caller_pids)
-      [] -> :none
+    @lazy_modules_table
+    |> :ets.lookup(module)
+    |> Enum.find_value(:none, fn {_module, owner_pid, fun} ->
+      if lazy_fun_matches?(fun, caller_pids), do: {:ok, owner_pid}
+    end)
+  end
+
+  defp lazy_fun_matches?(fun, caller_pids) do
+    fun
+    |> evaluate_lazy_fun()
+    |> Enum.any?(&(&1 in caller_pids))
+  end
+
+  defp evaluate_lazy_fun(fun) do
+    raw_result = fun.()
+
+    pids =
+      raw_result
+      |> List.wrap()
+      |> Enum.reject(&is_nil/1)
+
+    if Enum.all?(pids, &is_pid/1) do
+      pids
+    else
+      raise ArgumentError,
+            "lazy allowance callback passed to allow/3 must return a pid or nil (or a list of those), got: #{inspect(raw_result)}"
     end
   end
 

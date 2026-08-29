@@ -315,7 +315,7 @@ defmodule Mimic do
     * `allowed_pid_or_fun` - the process ID of the process which should also be
       allowed to use this stub, or a zero-arity function to resolve allowed pids
       lazily at time of invocation. If a function is provided, it must return a
-      pid, a list of pids, or `nil`.
+      pid, `nil`, or a list of those.
 
   ## Raises:
 
@@ -358,7 +358,8 @@ defmodule Mimic do
   end
   ```
   """
-  @spec allow(module(), pid(), pid() | (-> pid() | [pid()] | nil)) :: module() | {:error, atom()}
+  @spec allow(module(), pid(), pid() | (-> pid() | [pid() | nil] | nil)) ::
+          module() | {:error, atom()}
   def allow(module, owner_pid, allowed_pid_or_fun)
 
   def allow(module, owner_pid, fun) when is_function(fun, 0) do
