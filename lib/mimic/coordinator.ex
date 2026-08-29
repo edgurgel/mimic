@@ -192,9 +192,9 @@ defmodule Mimic.Coordinator do
       {:reply, {:error, {:module_already_copied, module}}, state}
     else
       # If cover is enabled call ensure_module_copied now
-      # Otherwise just store that the module that will be copied
+      # Otherwise just store the module that will be copied
       # and ensure_module_copied/2 will copy it when
-      # expect, stub, reject is called
+      # expect, stub, or reject is called
       state = %{
         state
         | modules_to_be_copied: MapSet.put(state.modules_to_be_copied, module),
