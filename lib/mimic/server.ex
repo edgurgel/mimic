@@ -117,11 +117,17 @@ defmodule Mimic.Server do
   end
 
   defp resolve_lazy_allowance(caller_pids, module) do
-    @lazy_modules_table
-    |> :ets.lookup(module)
-    |> Enum.find_value(:none, fn {_module, owner_pid, fun} ->
-      if lazy_fun_matches?(fun, caller_pids), do: {:ok, owner_pid}
-    end)
+    case :ets.lookup(@table, :mode) do
+      [{:mode, :private}] ->
+        @lazy_modules_table
+        |> :ets.lookup(module)
+        |> Enum.find_value(:none, fn {_module, owner_pid, fun} ->
+          if lazy_fun_matches?(fun, caller_pids), do: {:ok, owner_pid}
+        end)
+
+      [{:mode, :global, _global_pid}] ->
+        :none
+    end
   end
 
   defp lazy_fun_matches?(fun, caller_pids) do

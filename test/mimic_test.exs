@@ -1353,6 +1353,38 @@ defmodule Mimic.Test do
         allow(Calculator, self(), fn -> self() end)
       end
     end
+
+    test "lazy allowances registered under private mode do not apply after switching to global mode" do
+      parent_pid = self()
+      name = :"lazy_mode_switch_#{System.unique_integer([:positive])}"
+
+      Calculator
+      |> stub(:add, fn _, _ -> 999 end)
+      |> allow(self(), fn -> Process.whereis(name) end)
+
+      allowed_pid =
+        spawn_link(fn ->
+          Process.register(self(), name)
+
+          receive do
+            :call_add -> send(parent_pid, {:result, Calculator.add(1, 3)})
+          end
+        end)
+
+      spawn_link(fn ->
+        Mimic.set_mimic_global()
+        send(parent_pid, :global_set)
+      end)
+
+      assert_receive :global_set
+
+      # allowed_pid's lazy allowance was registered while mode was private, and
+      # the global owner never stubbed Calculator. The call should fall through
+      # to the original implementation rather than resolving through the
+      # now-stale private-mode allowance.
+      send(allowed_pid, :call_add)
+      assert_receive {:result, 4}
+    end
   end
 
   describe "mode/0 global mode" do
