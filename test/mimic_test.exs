@@ -1153,50 +1153,88 @@ defmodule Mimic.Test do
       assert Calculator.add(2, 3) == 5
     end
 
-    test "raises if the lazy function returns something other than a pid, list of pids, or nil" do
-      # Called from a spawned process rather than self(): the owner always
-      # resolves via the plain (non-lazy) ownership path once it registers
-      # via stub/expect, so it would never reach the lazy resolution this
-      # test is targeting.
+    test "falls through to original when the lazy function returns something other than a pid, list of pids, or nil" do
       parent_pid = self()
 
       Calculator
       |> stub(:add, fn _, _ -> :should_not_be_reached end)
       |> allow(self(), fn -> :not_a_pid end)
 
-      spawn_link(fn ->
-        try do
-          Calculator.add(2, 3)
-        rescue
-          error -> send(parent_pid, {:raised, error})
-        end
-      end)
+      spawn_link(fn -> send(parent_pid, {:result, Calculator.add(2, 3)}) end)
 
-      assert_receive {:raised, %ArgumentError{message: message}}
-
-      assert message ==
-               "lazy allowance callback passed to allow/3 must return a pid or nil (or a list of those), got: :not_a_pid"
+      assert_receive {:result, 5}
     end
 
-    test "raises if the lazy function returns a list containing a non-pid" do
+    test "falls through to original when the lazy function returns a list containing only non-pids" do
       parent_pid = self()
 
       Calculator
       |> stub(:add, fn _, _ -> :should_not_be_reached end)
-      |> allow(self(), fn -> [parent_pid, :not_a_pid] end)
+      |> allow(self(), fn -> [:not_a_pid, :also_not_a_pid] end)
+
+      spawn_link(fn -> send(parent_pid, {:result, Calculator.add(2, 3)}) end)
+
+      assert_receive {:result, 5}
+    end
+
+    test "falls through to original when the lazy function raises" do
+      parent_pid = self()
+
+      Calculator
+      |> stub(:add, fn _, _ -> :should_not_be_reached end)
+      |> allow(self(), fn -> raise "boom" end)
+
+      spawn_link(fn -> send(parent_pid, {:result, Calculator.add(2, 3)}) end)
+
+      assert_receive {:result, 5}
+    end
+
+    test "matches a pid returned alongside an invalid entry in the same list" do
+      parent_pid = self()
+      name = :"lazy_#{System.unique_integer([:positive])}"
+
+      Calculator
+      |> expect(:add, fn _, _ -> :matched end)
+      |> allow(self(), fn -> [:not_a_pid, Process.whereis(name)] end)
 
       spawn_link(fn ->
-        try do
-          Calculator.add(2, 3)
-        rescue
-          error -> send(parent_pid, {:raised, error})
-        end
+        Process.register(self(), name)
+        send(parent_pid, {:result, Calculator.add(2, 3)})
       end)
 
-      assert_receive {:raised, %ArgumentError{message: message}}
+      assert_receive {:result, :matched}
+    end
 
-      assert message ==
-               "lazy allowance callback passed to allow/3 must return a pid or nil (or a list of those), got: [#{inspect(parent_pid)}, :not_a_pid]"
+    test "a raising lazy allowance from one owner does not block a different owner's matching lazy allowance" do
+      parent_pid = self()
+      name = :"lazy_#{System.unique_integer([:positive])}"
+
+      _other_owner =
+        spawn(fn ->
+          Calculator
+          |> stub(:add, fn _, _ -> :should_not_be_reached end)
+          |> allow(self(), fn -> raise "BOOM! Unrelated owner's bad callback." end)
+
+          send(parent_pid, :other_owner_ready)
+
+          # Keep this procees alive so its lazy allowance stays in effect
+          receive do
+            :done -> :ok
+          end
+        end)
+
+      assert_receive :other_owner_ready
+
+      Calculator
+      |> expect(:add, fn _, _ -> :matched end)
+      |> allow(self(), fn -> Process.whereis(name) end)
+
+      spawn_link(fn ->
+        Process.register(self(), name)
+        send(parent_pid, {:result, Calculator.add(2, 3)})
+      end)
+
+      assert_receive {:result, :matched}
     end
 
     test "supports stubs" do

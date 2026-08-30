@@ -132,24 +132,15 @@ defmodule Mimic.Server do
 
   defp lazy_fun_matches?(fun, caller_pids) do
     fun
-    |> evaluate_lazy_fun()
+    |> call_lazy_fun()
+    |> List.wrap()
     |> Enum.any?(&(&1 in caller_pids))
   end
 
-  defp evaluate_lazy_fun(fun) do
-    raw_result = fun.()
-
-    pids =
-      raw_result
-      |> List.wrap()
-      |> Enum.reject(&is_nil/1)
-
-    if Enum.all?(pids, &is_pid/1) do
-      pids
-    else
-      raise ArgumentError,
-            "lazy allowance callback passed to allow/3 must return a pid or nil (or a list of those), got: #{inspect(raw_result)}"
-    end
+  defp call_lazy_fun(fun) do
+    fun.()
+  rescue
+    _error -> nil
   end
 
   defp do_apply(owner_pid, module, fn_name, arity, args) do
