@@ -127,13 +127,8 @@ defmodule Mimic.Coordinator do
   def handle_call({:allow, module, owner_pid, allowed_pid}, _from, state) do
     case :ets.lookup(@table, :mode) do
       [{:mode, :private}] ->
-        case :ets.lookup(@table, {owner_pid, module}) do
-          [{{^owner_pid, ^module}, actual_owner_pid}] ->
-            :ets.insert(@table, {{allowed_pid, module}, actual_owner_pid})
-
-          [] ->
-            :ets.insert(@table, {{allowed_pid, module}, owner_pid})
-        end
+        actual_owner = resolve_actual_owner(owner_pid, module)
+        :ets.insert(@table, {{allowed_pid, module}, actual_owner})
 
         {:reply, {:ok, module}, state}
 
@@ -145,12 +140,7 @@ defmodule Mimic.Coordinator do
   def handle_call({:allow_lazy, module, owner_pid, fun}, _from, state) do
     case :ets.lookup(@table, :mode) do
       [{:mode, :private}] ->
-        actual_owner =
-          case :ets.lookup(@table, {owner_pid, module}) do
-            [{{^owner_pid, ^module}, actual_owner_pid}] -> actual_owner_pid
-            [] -> owner_pid
-          end
-
+        actual_owner = resolve_actual_owner(owner_pid, module)
         monitor_lazy_owner(actual_owner)
         :ets.insert(@lazy_modules_table, {module, actual_owner, fun})
 
@@ -303,6 +293,16 @@ defmodule Mimic.Coordinator do
 
       true ->
         {:error, {:module_not_copied, module}}
+    end
+  end
+
+  # If owner_pid is itself an allowed pid (i.e. it was allowed access to
+  # module by some other owner), resolve back to that ultimate owner so
+  # allowances stay tied to the original owner rather than an intermediate.
+  defp resolve_actual_owner(owner_pid, module) do
+    case :ets.lookup(@table, {owner_pid, module}) do
+      [{{^owner_pid, ^module}, actual_owner_pid}] -> actual_owner_pid
+      [] -> owner_pid
     end
   end
 
