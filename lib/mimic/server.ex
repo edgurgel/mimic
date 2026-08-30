@@ -106,7 +106,7 @@ defmodule Mimic.Server do
       caller_pids = [self() | Process.get(:"$callers", [])]
 
       with :none <- allowed_pid(caller_pids, module),
-           :none <- resolve_lazy_allowance(caller_pids, module) do
+           :none <- lazily_allowed_pid(caller_pids, module) do
         apply_original(module, fn_name, args)
       else
         {:ok, owner_pid} -> do_apply(owner_pid, module, fn_name, arity, args)
@@ -116,7 +116,7 @@ defmodule Mimic.Server do
     end
   end
 
-  defp resolve_lazy_allowance(caller_pids, module) do
+  defp lazily_allowed_pid(caller_pids, module) do
     case :ets.lookup(@table, :mode) do
       [{:mode, :private}] ->
         @lazy_modules_table
