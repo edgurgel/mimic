@@ -1284,7 +1284,7 @@ defmodule Mimic.Test do
 
       :timer.sleep(1)
 
-      assert :ets.match_object(:lazy_modules, {Calculator, owner_pid, :_}) == []
+      assert :ets.match_object(:lazy_allowances, {Calculator, owner_pid, :_}) == []
 
       # After owner dies, lazy allowance should be gone — calls fall through to original
       send(allowed_pid, :call_add)
@@ -1370,14 +1370,14 @@ defmodule Mimic.Test do
           end
         end)
 
-      refute :ets.match_object(:lazy_modules, {Calculator, owner_pid, :_}) == []
+      refute :ets.match_object(:lazy_allowances, {Calculator, owner_pid, :_}) == []
 
       Process.monitor(owner_pid)
       send(owner_pid, :die)
       assert_receive {:DOWN, _, _, ^owner_pid, _}
       :timer.sleep(1)
 
-      assert :ets.match_object(:lazy_modules, {Calculator, owner_pid, :_}) == []
+      assert :ets.match_object(:lazy_allowances, {Calculator, owner_pid, :_}) == []
 
       # After owner dies, lazy allowance should be gone — calls fall through to original
       send(allowed_pid, :call_add)

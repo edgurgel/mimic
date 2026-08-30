@@ -23,7 +23,7 @@ defmodule Mimic.Coordinator do
   @table Mimic.Coordinator
 
   # Holds lazy allowances directly as {module, owner_pid, fun} rows, keyed by module.
-  @lazy_modules_table :lazy_modules
+  @lazy_allowances_table :lazy_allowances
 
   @spec ensure_copied(module) :: :ok | {:error, {:module_not_copied, module}}
   def ensure_copied(module) do
@@ -101,7 +101,7 @@ defmodule Mimic.Coordinator do
 
   def init([]) do
     :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
-    :ets.new(@lazy_modules_table, [:named_table, :protected, :bag, read_concurrency: true])
+    :ets.new(@lazy_allowances_table, [:named_table, :protected, :bag, read_concurrency: true])
 
     :ets.insert(@table, {:mode, :private})
     {:ok, %State{}}
@@ -142,7 +142,7 @@ defmodule Mimic.Coordinator do
       [{:mode, :private}] ->
         actual_owner = resolve_actual_owner(owner_pid, module)
         monitor_lazy_owner(actual_owner)
-        :ets.insert(@lazy_modules_table, {module, actual_owner, fun})
+        :ets.insert(@lazy_allowances_table, {module, actual_owner, fun})
 
         {:reply, {:ok, module}, state}
 
@@ -160,7 +160,7 @@ defmodule Mimic.Coordinator do
     )
     |> Stream.run()
 
-    :ets.delete_all_objects(@lazy_modules_table)
+    :ets.delete_all_objects(@lazy_allowances_table)
     :ets.insert(@table, {:mode, :private})
     {:reply, :ok, state}
   end
@@ -312,6 +312,6 @@ defmodule Mimic.Coordinator do
   end
 
   defp remove_lazy_allowances(pid) do
-    :ets.select_delete(@lazy_modules_table, [{{:_, pid, :_}, [], [true]}])
+    :ets.select_delete(@lazy_allowances_table, [{{:_, pid, :_}, [], [true]}])
   end
 end

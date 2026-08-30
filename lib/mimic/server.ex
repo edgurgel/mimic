@@ -27,7 +27,7 @@ defmodule Mimic.Server do
   @table Mimic.Coordinator
 
   # Owned by Mimic.Coordinator, but read directly here
-  @lazy_modules_table :lazy_modules
+  @lazy_allowances_table :lazy_allowances
 
   defp shard(pid), do: {:via, PartitionSupervisor, {Mimic.Server.Partitions, pid}}
 
@@ -124,7 +124,7 @@ defmodule Mimic.Server do
   end
 
   defp find_lazy_allowed_pid(caller_pids, module) do
-    @lazy_modules_table
+    @lazy_allowances_table
     |> :ets.lookup(module)
     |> Enum.find_value(:none, fn {_module, owner_pid, fun} ->
       if lazy_fun_matches?(fun, caller_pids), do: {:ok, owner_pid}
