@@ -26,6 +26,9 @@ defmodule Mimic.Server do
   # Shared allowances/mode table owned by Mimic.Coordinator
   @table Mimic.Coordinator
 
+  # Owned by Mimic.Coordinator, but read directly here
+  @lazy_allowances_table :lazy_allowances
+
   defp shard(pid), do: {:via, PartitionSupervisor, {Mimic.Server.Partitions, pid}}
 
   @spec verify(pid) :: [{{module, atom, non_neg_integer}, non_neg_integer, non_neg_integer}]
@@ -102,16 +105,43 @@ defmodule Mimic.Server do
     if function_exported?(original_module, fn_name, arity) do
       caller_pids = [self() | Process.get(:"$callers", [])]
 
-      case allowed_pid(caller_pids, module) do
-        {:ok, owner_pid} ->
-          do_apply(owner_pid, module, fn_name, arity, args)
-
-        _ ->
-          apply_original(module, fn_name, args)
+      with :none <- allowed_pid(caller_pids, module),
+           :none <- lazily_allowed_pid(caller_pids, module) do
+        apply_original(module, fn_name, args)
+      else
+        {:ok, owner_pid} -> do_apply(owner_pid, module, fn_name, arity, args)
       end
     else
       raise Mimic.Error, module: module, fn_name: fn_name, arity: arity
     end
+  end
+
+  defp lazily_allowed_pid(caller_pids, module) do
+    case :ets.lookup(@table, :mode) do
+      [{:mode, :private}] -> find_lazy_allowed_pid(caller_pids, module)
+      [{:mode, :global, _global_pid}] -> :none
+    end
+  end
+
+  defp find_lazy_allowed_pid(caller_pids, module) do
+    @lazy_allowances_table
+    |> :ets.lookup(module)
+    |> Enum.find_value(:none, fn {_module, owner_pid, fun} ->
+      if lazy_fun_matches?(fun, caller_pids), do: {:ok, owner_pid}
+    end)
+  end
+
+  defp lazy_fun_matches?(fun, caller_pids) do
+    fun
+    |> call_lazy_fun()
+    |> List.wrap()
+    |> Enum.any?(&(&1 in caller_pids))
+  end
+
+  defp call_lazy_fun(fun) do
+    fun.()
+  rescue
+    _error -> nil
   end
 
   defp do_apply(owner_pid, module, fn_name, arity, args) do
