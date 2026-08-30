@@ -145,14 +145,13 @@ defmodule Mimic.Coordinator do
   def handle_call({:allow_lazy, module, owner_pid, fun}, _from, state) do
     case :ets.lookup(@table, :mode) do
       [{:mode, :private}] ->
-        monitor_lazy_owner(owner_pid)
-
         actual_owner =
           case :ets.lookup(@table, {owner_pid, module}) do
             [{{^owner_pid, ^module}, actual_owner_pid}] -> actual_owner_pid
             [] -> owner_pid
           end
 
+        monitor_lazy_owner(actual_owner)
         :ets.insert(@lazy_modules_table, {module, actual_owner, fun})
 
         {:reply, {:ok, module}, state}

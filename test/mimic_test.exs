@@ -1246,11 +1246,103 @@ defmodule Mimic.Test do
 
       :timer.sleep(1)
 
-      assert :ets.match(:lazy_modules, {Calculator, owner_pid, :_}) == []
+      assert :ets.match_object(:lazy_modules, {Calculator, owner_pid, :_}) == []
 
       # After owner dies, lazy allowance should be gone — calls fall through to original
       send(allowed_pid, :call_add)
 
+      assert_receive {:result, 4}
+    end
+
+    test "lazy allowances are transitive" do
+      parent_pid = self()
+
+      child_pid =
+        spawn_link(fn ->
+          receive do
+            :call_mock ->
+              add_result = Calculator.add(1, 1)
+              mult_result = Calculator.mult(1, 1)
+              send(parent_pid, {:verify, add_result, mult_result})
+          end
+        end)
+
+      transitive_pid =
+        spawn_link(fn ->
+          receive do
+            :allow_lazy ->
+              Calculator
+              |> allow(self(), fn -> child_pid end)
+
+              send(child_pid, :call_mock)
+          end
+        end)
+
+      Calculator
+      |> expect(:add, fn _, _ -> @expected end)
+      |> stub(:mult, fn _, _ -> @stubbed end)
+      |> allow(self(), transitive_pid)
+
+      send(transitive_pid, :allow_lazy)
+
+      assert_receive {:verify, add_result, mult_result}
+      assert add_result == @expected
+      assert mult_result == @stubbed
+    end
+
+    test "lazy allowances are reclaimed if the transitively resolved owner dies" do
+      parent_pid = self()
+      name = :"lazy_transitive_cleanup_#{System.unique_integer([:positive])}"
+
+      transitive_pid =
+        spawn_link(fn ->
+          receive do
+            :allow_lazy ->
+              Calculator
+              |> allow(self(), fn -> Process.whereis(name) end)
+
+              send(parent_pid, :lazy_allow_done)
+          end
+        end)
+
+      owner_pid =
+        spawn(fn ->
+          Calculator
+          |> stub(:add, fn _, _ -> 999 end)
+          |> allow(self(), transitive_pid)
+
+          send(parent_pid, :owner_ready)
+
+          receive do
+            :die -> :ok
+          end
+        end)
+
+      assert_receive :owner_ready
+
+      send(transitive_pid, :allow_lazy)
+      assert_receive :lazy_allow_done
+
+      allowed_pid =
+        spawn_link(fn ->
+          Process.register(self(), name)
+
+          receive do
+            :call_add -> send(parent_pid, {:result, Calculator.add(1, 3)})
+          end
+        end)
+
+      refute :ets.match_object(:lazy_modules, {Calculator, owner_pid, :_}) == []
+
+      Process.monitor(owner_pid)
+      send(owner_pid, :die)
+      assert_receive {:DOWN, _, _, ^owner_pid, _}
+      :timer.sleep(1)
+
+      assert :ets.match_object(:lazy_modules, {Calculator, owner_pid, :_}) == []
+
+      # After owner dies, lazy allowance should be gone — calls fall through to original
+      send(allowed_pid, :call_add)
       assert_receive {:result, 4}
     end
 
