@@ -1,12 +1,13 @@
-defmodule Mimic.GlobalTeardownRaceTest do
+defmodule Mimic.GlobalTeardownTest do
   use ExUnit.Case, async: false
 
-  # Global mode is released asynchronously: the owning process exiting triggers
-  # a cast to a Mimic.Server shard, which in turn casts
-  # `Coordinator.clear_global_owner/1`. Nothing ExUnit waits on closes that gap, so
-  # the next (private mode) test can still observe {:mode, :global, <dead pid>}.
+  # Releasing global mode has to be synchronous with the `on_exit` callback
+  # `verify_on_exit!` registers, because that callback is the last thing ExUnit
+  # waits for before starting the next test. If any part of it is a cast, the
+  # next (private mode) test can still observe {:mode, :global, <finished test
+  # pid>} and blow up with "Expect cannot be called by the current process."
   #
-  # Suspending the Coordinator here stands in for "the Coordinator has not been
+  # Suspending the Coordinator stands in for "the Coordinator has not been
   # scheduled yet", which is what CPU contention on a busy CI runner produces.
 
   setup do
@@ -16,22 +17,38 @@ defmodule Mimic.GlobalTeardownRaceTest do
     end)
   end
 
-  test "mode is back to private once the global owner's teardown has run" do
-    tear_down_global_owner()
+  test "Server.exit/1 does not return before global mode is released" do
+    owner = start_global_owner()
+    stop(owner)
+
+    # Busy system: the Coordinator does not get scheduled for a while.
+    :sys.suspend(Mimic.Coordinator)
+
+    # What `verify_on_exit!`'s on_exit callback does (mimic.ex).
+    {teardown, teardown_ref} = spawn_monitor(fn -> Mimic.Server.exit(owner) end)
+
+    refute_receive {:DOWN, ^teardown_ref, :process, ^teardown, _},
+                   100,
+                   "Server.exit/1 returned while global mode was still set"
+
+    :sys.resume(Mimic.Coordinator)
+    assert_receive {:DOWN, ^teardown_ref, :process, ^teardown, :normal}
 
     assert Mimic.Coordinator.get_mode() == :private
   end
 
-  test "the next test can set expectations once the global owner's teardown has run" do
-    tear_down_global_owner()
+  test "the next test can set expectations once the owner's teardown has run" do
+    owner = start_global_owner()
+    stop(owner)
+    Mimic.Server.exit(owner)
 
     Mimic.expect(Calculator, :add, fn _, _ -> 42 end)
     assert Calculator.add(1, 2) == 42
   end
 
-  # Runs a global mode owner, doing everything ExUnit and Mimic
-  # and returns once no further teardown work is synchronised with the test suite.
-  defp tear_down_global_owner do
+  # A global mode test process, set up the way `use Mimic` plus
+  # `setup :set_mimic_from_context` set up an `async: false` case.
+  defp start_global_owner do
     test_pid = self()
 
     owner =
@@ -40,6 +57,7 @@ defmodule Mimic.GlobalTeardownRaceTest do
         Mimic.set_mimic_global(%{})
         Mimic.stub(Calculator, :add, fn _, _ -> :stubbed end)
         send(test_pid, :ready)
+
         receive do
           :stop -> :ok
         end
@@ -48,19 +66,12 @@ defmodule Mimic.GlobalTeardownRaceTest do
     assert_receive :ready
     assert Mimic.Coordinator.get_mode() == :global
 
-    # suspended to "mimic" a busy system
-    :sys.suspend(Mimic.Coordinator)
+    owner
+  end
 
+  defp stop(owner) do
     ref = Process.monitor(owner)
     send(owner, :stop)
     assert_receive {:DOWN, ^ref, :process, ^owner, :normal}
-
-    # What Mimic's own `verify_on_exit!` on_exit callback does.
-    # ExUnit waits for that callback to return before starting the next test.
-    Mimic.Server.exit(owner)
-
-    # Make sure the shard's mailbox is empty: once this call is answered the shard has
-    # handled {:exit, owner} and has already cast `clear_global_owner/1`.
-    assert Mimic.Server.verify(owner) == []
   end
 end
