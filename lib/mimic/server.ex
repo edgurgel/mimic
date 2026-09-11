@@ -74,9 +74,22 @@ defmodule Mimic.Server do
     end
   end
 
+  # Synchronous on purpose: this runs from the `on_exit` callback registered by
+  # `verify_on_exit!`, which is the last thing ExUnit waits for before starting the next test.
+  # Avoids f.ex. global mode to leak into subsequent tests.
   @spec exit(pid) :: :ok
   def exit(pid) do
-    GenServer.cast(shard(pid), {:exit, pid})
+    :ok = GenServer.call(shard(pid), {:exit, pid}, @long_timeout)
+
+    # Only global owners need the extra round trip, so private mode teardowns
+    # don't serialize on the suite-wide `Coordinator`
+    if global_owner?(pid), do:  Coordinator.clear_global_owner(pid)
+
+    :ok
+  end
+
+  defp global_owner?(pid) do
+    match?([{:mode, :global, ^pid}], :ets.lookup(@table, :mode))
   end
 
   @spec get_calls(module, atom, arity) ::
@@ -181,15 +194,14 @@ defmodule Mimic.Server do
     {:ok, %State{}}
   end
 
-  def handle_cast({:exit, pid}, state) do
-    {:noreply, clear_data_from_pid(pid, state)}
-  end
-
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
     new_state =
       if MapSet.member?(state.verify_on_exit, pid) do
         state
       else
+        # Safety net for owners that exited without going through `exit/1`
+        # Nothing is waiting on this, so releasing global mode can be async
+        Coordinator.clear_global_owner_async(pid)
         clear_data_from_pid(pid, state)
       end
 
@@ -208,8 +220,6 @@ defmodule Mimic.Server do
     select = [{{{pid, :_}, :_}, [], [true]}, {{{:_, :_}, pid}, [], [true]}]
 
     :ets.select_delete(@table, select)
-
-    Coordinator.clear_global_owner(pid)
 
     call_history = Map.delete(state.call_history, pid)
 
@@ -383,6 +393,10 @@ defmodule Mimic.Server do
 
   def handle_call({:verify_on_exit, pid}, _from, state) do
     {:reply, :ok, %{state | verify_on_exit: MapSet.put(state.verify_on_exit, pid)}}
+  end
+
+  def handle_call({:exit, pid}, _from, state) do
+    {:reply, :ok, clear_data_from_pid(pid, state)}
   end
 
   def handle_call(:soft_reset, _from, state) do

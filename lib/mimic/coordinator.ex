@@ -41,8 +41,16 @@ defmodule Mimic.Coordinator do
     GenServer.call(__MODULE__, {:allow, module, owner_pid, allowed_pid}, @long_timeout)
   end
 
+  # Blocks until global mode is actually released, so test teardown can wait for
+  # it. Must not be called from inside a Mimic.Server shard: `soft_reset` calls
+  # into every shard, so a shard blocking on the Coordinator can deadlock.
   @spec clear_global_owner(pid) :: :ok
   def clear_global_owner(pid) do
+    GenServer.call(__MODULE__, {:clear_global_owner, pid}, @long_timeout)
+  end
+
+  @spec clear_global_owner_async(pid) :: :ok
+  def clear_global_owner_async(pid) do
     GenServer.cast(__MODULE__, {:clear_global_owner, pid})
   end
 
@@ -107,6 +115,11 @@ defmodule Mimic.Coordinator do
 
   def handle_call({:set_global_mode, owner_pid}, _from, state) do
     :ets.insert(@table, {:mode, :global, owner_pid})
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:clear_global_owner, pid}, _from, state) do
+    release_global_mode(pid)
     {:reply, :ok, state}
   end
 
@@ -214,12 +227,15 @@ defmodule Mimic.Coordinator do
   end
 
   def handle_cast({:clear_global_owner, pid}, state) do
+    release_global_mode(pid)
+    {:noreply, state}
+  end
+
+  defp release_global_mode(pid) do
     case :ets.lookup(@table, :mode) do
       [{:mode, :global, ^pid}] -> :ets.insert(@table, {:mode, :private})
       _ -> :ok
     end
-
-    {:noreply, state}
   end
 
   # Reset task has successfully finished
