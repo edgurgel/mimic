@@ -83,7 +83,7 @@ defmodule Mimic.Server do
 
     # Only global owners need the extra round trip, so private mode teardowns
     # don't serialize on the suite-wide `Coordinator`
-    if global_owner?(pid), do:  Coordinator.clear_global_owner(pid)
+    if global_owner?(pid), do: Coordinator.clear_global_owner(pid)
 
     :ok
   end
