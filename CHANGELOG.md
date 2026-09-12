@@ -1,3 +1,8 @@
+# 2.4.1 (2026-09-12)
+
+* fix: memory leak from incorrect ETS select clause by @bencoppock in #123
+* chore: enable ExDoc markdown documentation by @BobbieBarker in #122
+
 # 2.4.0 (2026-08-22)
 
 * perf: shard `Mimic.Server` into one partition per scheduler (routed by owner
