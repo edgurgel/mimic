@@ -1,4 +1,4 @@
-# Unreleased
+# 2.4.2 (2026-09-18)
 
 * fix: release global mode when the test that set it finishes. It was handed back
   asynchronously with nothing waiting on it, so under load a later test could find
