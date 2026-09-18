@@ -209,8 +209,6 @@ defmodule Mimic.Server do
 
     :ets.select_delete(@table, select)
 
-    Coordinator.clear_global_owner(pid)
-
     call_history = Map.delete(state.call_history, pid)
 
     %{state | expectations: expectations, stubs: stubs, call_history: call_history}

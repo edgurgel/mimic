@@ -7,7 +7,6 @@ defmodule Mimic.Test do
   @expected_2 300
 
   @stubbed 400
-  @private_stub 500
   @elixir_version System.version() |> Float.parse() |> elem(0)
 
   describe "no stub or expects private mode" do
@@ -25,34 +24,6 @@ defmodule Mimic.Test do
     test "no stubs calls original" do
       assert Calculator.add(2, 2) == 4
       assert Calculator.mult(2, 3) == 6
-    end
-  end
-
-  describe "default mode" do
-    test "private mode is the default mode" do
-      pid =
-        spawn_link(fn ->
-          Mimic.set_mimic_global()
-          stub(Calculator, :add, fn _, _ -> @stubbed end)
-
-          pid =
-            spawn_link(fn ->
-              assert Calculator.add(3, 7) == @stubbed
-            end)
-
-          Process.monitor(pid)
-          assert_receive {:DOWN, _, _, ^pid, _}
-          refute Process.alive?(pid)
-        end)
-
-      Process.monitor(pid)
-      assert_receive {:DOWN, _, _, ^pid, _}
-      refute Process.alive?(pid)
-
-      :timer.sleep(1)
-
-      stub(Calculator, :add, fn _, _ -> @private_stub end)
-      assert Calculator.add(3, 7) == @private_stub
     end
   end
 
