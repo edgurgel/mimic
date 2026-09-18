@@ -41,9 +41,10 @@ defmodule Mimic.Coordinator do
     GenServer.call(__MODULE__, {:allow, module, owner_pid, allowed_pid}, @long_timeout)
   end
 
-  @spec clear_global_owner(pid) :: :ok
-  def clear_global_owner(pid) do
-    GenServer.cast(__MODULE__, {:clear_global_owner, pid})
+  @spec release_global_owner(pid) :: :ok
+  def release_global_owner(owner) do
+    :ets.select_replace(@table, [{{:mode, :global, owner}, [], [{:const, {:mode, :private}}]}])
+    :ok
   end
 
   @spec set_private_mode :: :ok
@@ -211,15 +212,6 @@ defmodule Mimic.Coordinator do
 
       {:reply, :ok, state}
     end
-  end
-
-  def handle_cast({:clear_global_owner, pid}, state) do
-    case :ets.lookup(@table, :mode) do
-      [{:mode, :global, ^pid}] -> :ets.insert(@table, {:mode, :private})
-      _ -> :ok
-    end
-
-    {:noreply, state}
   end
 
   # Reset task has successfully finished

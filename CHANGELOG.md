@@ -1,3 +1,15 @@
+# Unreleased
+
+* fix: release global mode when the test that set it finishes. It was handed back
+  asynchronously with nothing waiting on it, so under load a later test could find
+  a finished test's pid still holding it and fail with "Expect cannot be called by
+  the current process. Only the global owner is allowed."
+* **breaking**: `set_mimic_global/1` now raises when called outside a test process.
+  Global mode is released by an `on_exit` callback, which only the test process can
+  register, so such a call took a mode that was never handed back and left the rest
+  of the suite stuck in global mode. Call it from the test process (or a `setup`
+  block) instead.
+
 # 2.4.1 (2026-09-12)
 
 * fix: memory leak from incorrect ETS select clause by @bencoppock in #123

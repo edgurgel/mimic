@@ -456,6 +456,9 @@ defmodule Mimic do
   ```elixir
   setup :set_mimic_global
   ```
+
+  Must be called from the test process, since global mode is released by an
+  `ExUnit.Callbacks.on_exit/2` callback. Raises otherwise.
   """
   @spec set_mimic_global(map()) :: :ok
   def set_mimic_global(_context \\ %{})
@@ -465,7 +468,25 @@ defmodule Mimic do
             "If you want to use Mimic in global mode, remove \"async: true\" when using ExUnit.Case"
   end
 
-  def set_mimic_global(_context), do: Coordinator.set_global_mode(self())
+  def set_mimic_global(_context) do
+    owner = self()
+    # Registered before the mode is taken, so a raise here leaves the mode alone.
+    # Releasing is a compare-and-swap, so a callback that outlives the mode is a no-op.
+    release_global_owner_on_exit(owner)
+    :ok = Coordinator.set_global_mode(owner)
+  end
+
+  defp release_global_owner_on_exit(owner) do
+    Callbacks.on_exit({Mimic, :global_mode}, fn ->
+      Coordinator.release_global_owner(owner)
+    end)
+  rescue
+    ArgumentError ->
+      reraise "Mimic cannot be set to global mode outside of a test process. " <>
+                "Global mode is released by an on_exit callback, which only the test " <>
+                "process can register, so it would never be handed back.",
+              __STACKTRACE__
+  end
 
   @doc """
   Chooses the mode based on ExUnit context. If `async` is `true` then
