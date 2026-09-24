@@ -11,6 +11,12 @@ defmodule Mimic.Coordinator do
     @moduledoc false
     defstruct modules_beam: %{},
               modules_to_be_copied: MapSet.new(),
+              # module => %{ref: task_ref, waiting: [from]} for copies in flight
+              modules_copying: %{},
+              # task_ref => module, reverse index of modules_copying
+              copy_tasks: %{},
+              # value of `ignore_module_conflict` to restore once no copy is in flight
+              saved_ignore_module_conflict: nil,
               modules_opts: %{},
               reset_tasks: %{},
               # whether the suite-end soft_reset hook has been registered
@@ -27,7 +33,12 @@ defmodule Mimic.Coordinator do
     if Mimic.Module.copied?(module) do
       :ok
     else
-      GenServer.call(__MODULE__, {:ensure_copied, module}, @long_timeout)
+      case GenServer.call(__MODULE__, {:ensure_copied, module}, @long_timeout) do
+        # The copy task crashed. Surface it the same way a crash inside the
+        # Coordinator used to: as an exit in the caller.
+        {:exit, reason} -> exit({:module_copy_failed, module, reason})
+        result -> result
+      end
     end
   end
 
@@ -99,11 +110,8 @@ defmodule Mimic.Coordinator do
     {:ok, %State{}}
   end
 
-  def handle_call({:ensure_copied, module}, _from, state) do
-    case ensure_module_copied(module, state) do
-      {:ok, state} -> {:reply, :ok, state}
-      {:error, reason} -> {:reply, {:error, reason}, state}
-    end
+  def handle_call({:ensure_copied, module}, from, state) do
+    respond_ensure_module_copied(module, from, state)
   end
 
   def handle_call({:set_global_mode, owner_pid}, _from, state) do
@@ -158,6 +166,10 @@ defmodule Mimic.Coordinator do
   def handle_call({:reset, module}, _from, state) do
     state = %{state | modules_to_be_copied: MapSet.delete(state.modules_to_be_copied, module)}
 
+    # A copy may still be in flight if the process that requested it died while
+    # waiting (e.g. a test timeout). Wait for it so the reset below sees the copy.
+    state = await_copy(module, state)
+
     tasks =
       if Mimic.Module.copied?(module) do
         task = Task.async(fn -> do_reset(module, state) end)
@@ -188,7 +200,7 @@ defmodule Mimic.Coordinator do
     {:reply, marked_to_copy?(module, state), state}
   end
 
-  def handle_call({:mark_to_copy, module, opts}, _from, state) do
+  def handle_call({:mark_to_copy, module, opts}, from, state) do
     if marked_to_copy?(module, state) do
       {:reply, {:error, {:module_already_copied, module}}, state}
     else
@@ -202,15 +214,11 @@ defmodule Mimic.Coordinator do
           modules_opts: Map.put(state.modules_opts, module, opts)
       }
 
-      state =
-        if Cover.enabled_for?(module) do
-          {:ok, state} = ensure_module_copied(module, state)
-          state
-        else
-          state
-        end
-
-      {:reply, :ok, state}
+      if Cover.enabled_for?(module) do
+        respond_ensure_module_copied(module, from, state)
+      else
+        {:reply, :ok, state}
+      end
     end
   end
 
@@ -219,6 +227,18 @@ defmodule Mimic.Coordinator do
     reset_tasks = Map.delete(state.reset_tasks, ref)
 
     {:noreply, %{state | reset_tasks: reset_tasks}}
+  end
+
+  # Copy task finished
+  def handle_info({ref, {:copied, data}}, state) when is_map_key(state.copy_tasks, ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, finish_copy(ref, {:ok, data}, state)}
+  end
+
+  # Copy task crashed (async_nolink, so we get the DOWN instead of dying with it)
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state)
+      when is_map_key(state.copy_tasks, ref) do
+    {:noreply, finish_copy(ref, {:error, reason}, state)}
   end
 
   # DOWN from a completed reset task
@@ -248,23 +268,118 @@ defmodule Mimic.Coordinator do
     end
   end
 
-  defp ensure_module_copied(module, state) do
+  defp respond_ensure_module_copied(module, from, state) do
     cond do
+      Map.has_key?(state.modules_copying, module) ->
+        {:noreply, add_waiter(module, from, state)}
+
       Mimic.Module.copied?(module) ->
-        {:ok, state}
+        {:reply, :ok, state}
 
       MapSet.member?(state.modules_to_be_copied, module) ->
-        case Mimic.Module.replace!(module, state.modules_opts[module]) do
-          {beam_file, coverdata_path} ->
-            modules_beam = Map.put(state.modules_beam, module, {beam_file, coverdata_path})
-            {:ok, %{state | modules_beam: modules_beam}}
-
-          :ok ->
-            {:ok, state}
-        end
+        {:noreply, start_copy(module, from, state)}
 
       true ->
-        {:error, {:module_not_copied, module}}
+        {:reply, {:error, {:module_not_copied, module}}, state}
     end
   end
+
+  defp add_waiter(module, from, state) do
+    modules_copying =
+      Map.update!(state.modules_copying, module, fn copy ->
+        %{copy | waiting: [from | copy.waiting]}
+      end)
+
+    %{state | modules_copying: modules_copying}
+  end
+
+  # Copying is slow (it recompiles the original module) so it runs in a task and
+  # the caller is parked until it finishes. That keeps the Coordinator responsive
+  # for unrelated modules and lets copies of different modules overlap.
+  defp start_copy(module, from, state) do
+    opts = state.modules_opts[module]
+
+    # Global, non-idempotent-under-concurrency setup that used to be implicitly
+    # serialised by running the copy inside this process. Do it here, once.
+    state = ensure_ignore_module_conflict(state)
+    if Cover.enabled_for?(module), do: Cover.export_private_functions()
+
+    task =
+      Task.Supervisor.async_nolink(Mimic.TaskSupervisor, fn ->
+        {:copied, Mimic.Module.replace!(module, opts)}
+      end)
+
+    %{
+      state
+      | modules_copying:
+          Map.put(state.modules_copying, module, %{ref: task.ref, waiting: [from]}),
+        copy_tasks: Map.put(state.copy_tasks, task.ref, module)
+    }
+  end
+
+  defp finish_copy(ref, result, state) do
+    {module, copy_tasks} = Map.pop!(state.copy_tasks, ref)
+    {%{waiting: waiting}, modules_copying} = Map.pop!(state.modules_copying, module)
+
+    {reply, modules_beam} =
+      case result do
+        {:ok, {beam_file, coverdata_path}} ->
+          {:ok, Map.put(state.modules_beam, module, {beam_file, coverdata_path})}
+
+        {:ok, :ok} ->
+          {:ok, state.modules_beam}
+
+        {:error, reason} ->
+          {{:exit, reason}, state.modules_beam}
+      end
+
+    Enum.each(waiting, &GenServer.reply(&1, reply))
+
+    state = %{
+      state
+      | modules_beam: modules_beam,
+        modules_copying: modules_copying,
+        copy_tasks: copy_tasks
+    }
+
+    restore_ignore_module_conflict(state)
+  end
+
+  # Blocks until an in-flight copy of `module` (if any) is done and applied to the state.
+  defp await_copy(module, state) do
+    case state.modules_copying do
+      %{^module => %{ref: ref}} ->
+        receive do
+          {^ref, {:copied, data}} ->
+            Process.demonitor(ref, [:flush])
+            finish_copy(ref, {:ok, data}, state)
+
+          {:DOWN, ^ref, :process, _pid, reason} ->
+            finish_copy(ref, {:error, reason}, state)
+        after
+          @long_timeout -> exit({:module_copy_timeout, module})
+        end
+
+      _ ->
+        state
+    end
+  end
+
+  # `ignore_module_conflict` is a VM-global compiler option. Copies now overlap, so
+  # instead of toggling it around each copy (racy), set it while any copy is in
+  # flight and put the previous value back once the last one finishes.
+  defp ensure_ignore_module_conflict(%{copy_tasks: tasks} = state) when map_size(tasks) == 0 do
+    previous = Map.get(Code.compiler_options(), :ignore_module_conflict, false)
+    Code.compiler_options(ignore_module_conflict: true)
+    %{state | saved_ignore_module_conflict: previous}
+  end
+
+  defp ensure_ignore_module_conflict(state), do: state
+
+  defp restore_ignore_module_conflict(%{copy_tasks: tasks} = state) when map_size(tasks) == 0 do
+    Code.compiler_options(ignore_module_conflict: state.saved_ignore_module_conflict)
+    %{state | saved_ignore_module_conflict: nil}
+  end
+
+  defp restore_ignore_module_conflict(state), do: state
 end
