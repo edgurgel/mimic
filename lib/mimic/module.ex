@@ -34,10 +34,10 @@ defmodule Mimic.Module do
           :ok
       end
 
+    # The Coordinator sets `ignore_module_conflict` while copies are in flight; this
+    # function must only be called from a task it spawns.
     rename_module(module, backup_module)
-    Code.compiler_options(ignore_module_conflict: true)
     create_mock(module, Map.new(opts))
-    Code.compiler_options(ignore_module_conflict: false)
 
     result
   end

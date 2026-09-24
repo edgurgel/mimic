@@ -4,6 +4,7 @@ defmodule Mimic.Application do
 
   def start(_, _) do
     children = [
+      {Task.Supervisor, name: Mimic.TaskSupervisor},
       Mimic.Coordinator,
       {PartitionSupervisor, child_spec: Mimic.Server, name: Mimic.Server.Partitions}
     ]
