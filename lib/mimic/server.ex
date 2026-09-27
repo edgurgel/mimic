@@ -11,6 +11,9 @@ defmodule Mimic.Server do
   defmodule State do
     @moduledoc false
     defstruct verify_on_exit: MapSet.new(),
+              # Owners we already hold a monitor for, so that N stubs/expects from
+              # the same process cost one monitor (and one :DOWN) instead of N.
+              monitored: MapSet.new(),
               stubs: %{},
               expectations: %{},
               call_history: %{}
@@ -186,6 +189,10 @@ defmodule Mimic.Server do
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    # The monitor is gone either way. Owners registered for verify_on_exit keep
+    # their data until Server.exit/1 arrives, since verify!/1 still has to read it.
+    state = %{state | monitored: MapSet.delete(state.monitored, pid)}
+
     new_state =
       if MapSet.member?(state.verify_on_exit, pid) do
         state
@@ -211,7 +218,14 @@ defmodule Mimic.Server do
 
     call_history = Map.delete(state.call_history, pid)
 
-    %{state | expectations: expectations, stubs: stubs, call_history: call_history}
+    %{
+      state
+      | expectations: expectations,
+        stubs: stubs,
+        call_history: call_history,
+        verify_on_exit: MapSet.delete(state.verify_on_exit, pid),
+        monitored: MapSet.delete(state.monitored, pid)
+    }
   end
 
   defp find_stub(stubs, module, fn_name, arity, caller) do
@@ -281,7 +295,7 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:stub, module, fn_name, func, arity, owner}, _from, state) do
-    register_owner(owner, module, state, fn ->
+    register_owner(owner, module, state, fn state ->
       func = maybe_typecheck_func(module, fn_name, func)
 
       %{
@@ -292,7 +306,7 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:stub, module, owner}, _from, state) do
-    register_owner(owner, module, state, fn ->
+    register_owner(owner, module, state, fn state ->
       internal_functions = [__info__: 1, module_info: 0, module_info: 1]
 
       stubs =
@@ -308,7 +322,7 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:stub_with, mocked_module, mocking_module, owner}, _from, state) do
-    register_owner(owner, mocked_module, state, fn ->
+    register_owner(owner, mocked_module, state, fn state ->
       original_module = Mimic.Module.original(mocked_module)
 
       internal_functions = [__info__: 1, module_info: 0, module_info: 1]
@@ -349,7 +363,7 @@ defmodule Mimic.Server do
   end
 
   def handle_call({:expect, {module, fn_name, func, arity}, num_calls, owner}, _from, state) do
-    register_owner(owner, module, state, fn ->
+    register_owner(owner, module, state, fn state ->
       func = maybe_typecheck_func(module, fn_name, func)
 
       expectation = %Expectation{func: func, num_calls: num_calls}
@@ -431,11 +445,11 @@ defmodule Mimic.Server do
   # land here rather than in four near-identical clauses.
   defp register_owner(owner, module, state, build_state) do
     if valid_mode?(owner) do
-      monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
+      state = monitor_owner(state, owner)
 
       :ets.insert_new(@table, {{owner, module}, owner})
 
-      {:reply, {:ok, module}, build_state.()}
+      {:reply, {:ok, module}, build_state.(state)}
     else
       {:reply, {:error, :not_global_owner}, state}
     end
@@ -448,9 +462,14 @@ defmodule Mimic.Server do
     end
   end
 
-  def monitor_if_not_verify_on_exit(pid, verify_on_exit) do
-    unless MapSet.member?(verify_on_exit, pid) do
+  # Owners registered for verify_on_exit are cleaned up by Server.exit/1 instead,
+  # so they need no monitor at all. Everyone else gets exactly one.
+  defp monitor_owner(state, pid) do
+    if MapSet.member?(state.verify_on_exit, pid) or MapSet.member?(state.monitored, pid) do
+      state
+    else
       Process.monitor(pid)
+      %{state | monitored: MapSet.put(state.monitored, pid)}
     end
   end
 
