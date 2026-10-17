@@ -22,6 +22,10 @@ defmodule Mimic.Coordinator do
   # Shared table holding owner allowances and the private/global mode flag.
   @table Mimic.Coordinator
 
+  # Lazy allowances as {module, owner_pid, fun} rows, keyed by module. Written by
+  # the owner's Mimic.Server shard, read by callers on dispatch.
+  @lazy_allowances_table Mimic.LazyAllowances
+
   @spec ensure_copied(module) :: :ok | {:error, {:module_not_copied, module}}
   def ensure_copied(module) do
     if Mimic.Module.copied?(module) do
@@ -94,6 +98,7 @@ defmodule Mimic.Coordinator do
 
   def init([]) do
     :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
+    :ets.new(@lazy_allowances_table, [:named_table, :public, :bag, read_concurrency: true])
 
     :ets.insert(@table, {:mode, :private})
     {:ok, %State{}}
@@ -119,13 +124,8 @@ defmodule Mimic.Coordinator do
   def handle_call({:allow, module, owner_pid, allowed_pid}, _from, state) do
     case :ets.lookup(@table, :mode) do
       [{:mode, :private}] ->
-        case :ets.lookup(@table, {owner_pid, module}) do
-          [{{^owner_pid, ^module}, actual_owner_pid}] ->
-            :ets.insert(@table, {{allowed_pid, module}, actual_owner_pid})
-
-          [] ->
-            :ets.insert(@table, {{allowed_pid, module}, owner_pid})
-        end
+        actual_owner = resolve_actual_owner(owner_pid, module)
+        :ets.insert(@table, {{allowed_pid, module}, actual_owner})
 
         {:reply, {:ok, module}, state}
 
@@ -143,6 +143,7 @@ defmodule Mimic.Coordinator do
     )
     |> Stream.run()
 
+    :ets.delete_all_objects(@lazy_allowances_table)
     :ets.insert(@table, {:mode, :private})
     {:reply, :ok, state}
   end
@@ -193,9 +194,9 @@ defmodule Mimic.Coordinator do
       {:reply, {:error, {:module_already_copied, module}}, state}
     else
       # If cover is enabled call ensure_module_copied now
-      # Otherwise just store that the module that will be copied
+      # Otherwise just store the module that will be copied
       # and ensure_module_copied/2 will copy it when
-      # expect, stub, reject is called
+      # expect, stub, or reject is called
       state = %{
         state
         | modules_to_be_copied: MapSet.put(state.modules_to_be_copied, module),
@@ -265,6 +266,16 @@ defmodule Mimic.Coordinator do
 
       true ->
         {:error, {:module_not_copied, module}}
+    end
+  end
+
+  # If owner_pid is itself an allowed pid (i.e. it was allowed access to
+  # module by some other owner), resolve back to that ultimate owner so
+  # allowances stay tied to the original owner rather than an intermediate.
+  defp resolve_actual_owner(owner_pid, module) do
+    case :ets.lookup(@table, {owner_pid, module}) do
+      [{{^owner_pid, ^module}, actual_owner_pid}] -> actual_owner_pid
+      [] -> owner_pid
     end
   end
 end

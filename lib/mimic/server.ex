@@ -26,6 +26,10 @@ defmodule Mimic.Server do
   # Shared allowances/mode table owned by Mimic.Coordinator
   @table Mimic.Coordinator
 
+  # Lazy allowances table owned by Mimic.Coordinator. Rows are written and cleaned
+  # up by the owner's shard, alongside the owner's other allowances.
+  @lazy_allowances_table Mimic.LazyAllowances
+
   defp shard(pid), do: {:via, PartitionSupervisor, {Mimic.Server.Partitions, pid}}
 
   @spec verify(pid) :: [{{module, atom, non_neg_integer}, non_neg_integer, non_neg_integer}]
@@ -74,6 +78,19 @@ defmodule Mimic.Server do
     end
   end
 
+  @spec allow_lazy(module, pid, (-> pid | [pid | nil] | nil)) :: {:ok, module} | {:error, :global}
+  def allow_lazy(module, owner_pid, fun) when is_function(fun, 0) do
+    # If owner_pid was itself allowed by another owner, tie the lazy allowance
+    # to that ultimate owner so it is cleaned up when that owner goes away.
+    owner_pid =
+      case find_owner([owner_pid], module) do
+        {:ok, actual_owner_pid} -> actual_owner_pid
+        :none -> owner_pid
+      end
+
+    GenServer.call(shard(owner_pid), {:allow_lazy, module, owner_pid, fun}, @long_timeout)
+  end
+
   @spec exit(pid) :: :ok
   def exit(pid) do
     GenServer.cast(shard(pid), {:exit, pid})
@@ -102,16 +119,65 @@ defmodule Mimic.Server do
     if function_exported?(original_module, fn_name, arity) do
       caller_pids = [self() | Process.get(:"$callers", [])]
 
-      case allowed_pid(caller_pids, module) do
-        {:ok, owner_pid} ->
-          do_apply(owner_pid, module, fn_name, arity, args)
-
-        _ ->
-          apply_original(module, fn_name, args)
+      with :none <- allowed_pid(caller_pids, module),
+           :none <- lazily_allowed_pid(caller_pids, module) do
+        apply_original(module, fn_name, args)
+      else
+        {:ok, owner_pid} -> do_apply(owner_pid, module, fn_name, arity, args)
       end
     else
       raise Mimic.Error, module: module, fn_name: fn_name, arity: arity
     end
+  end
+
+  defp lazily_allowed_pid(caller_pids, module) do
+    case :ets.lookup(@table, :mode) do
+      [{:mode, :private}] -> find_lazy_allowed_pid(caller_pids, module)
+      [{:mode, :global, _global_pid}] -> :none
+    end
+  end
+
+  # Every pid a lazy function resolves to is promoted to a regular allowance, so
+  # later calls from it take the regular lookup and never re-run the function.
+  # Once one of the callers is among them, the regular lookup decides the owner:
+  # if another owner's allowance won the race for that pid, its owner is used.
+  defp find_lazy_allowed_pid(caller_pids, module) do
+    @lazy_allowances_table
+    |> :ets.lookup(module)
+    |> Enum.find_value(:none, fn lazy_allowance = {_module, _owner_pid, fun} ->
+      pids = resolve_lazy_fun(fun)
+      Enum.each(pids, &promote_lazy_allowance(&1, lazy_allowance))
+      if Enum.any?(pids, &(&1 in caller_pids)), do: find_owner(caller_pids, module)
+    end)
+  end
+
+  defp resolve_lazy_fun(fun) do
+    fun
+    |> call_lazy_fun()
+    |> List.wrap()
+    |> Enum.filter(&is_pid/1)
+  end
+
+  defp promote_lazy_allowance(pid, lazy_allowance = {module, owner_pid, _fun}) do
+    allowance = {{pid, module}, owner_pid}
+
+    # insert_new/2 never overwrites, so a pid that is already allowed keeps its owner.
+    #
+    # Race: the owner can be cleaned up (clear_data_from_pid/2 or soft_reset) between
+    # our read of lazy_allowance and this insert, e.g. while the lazy function runs.
+    # Cleanup deletes lazy rows before regular rows, so if lazy_allowance is gone
+    # now, our row may have been inserted after cleanup and would be orphaned:
+    # undo it. delete_object/2 only removes our exact row, never another owner's.
+    if :ets.insert_new(@table, allowance) and
+         lazy_allowance not in :ets.lookup(@lazy_allowances_table, module) do
+      :ets.delete_object(@table, allowance)
+    end
+  end
+
+  defp call_lazy_fun(fun) do
+    fun.()
+  rescue
+    _error -> nil
   end
 
   defp do_apply(owner_pid, module, fn_name, arity, args) do
@@ -204,6 +270,9 @@ defmodule Mimic.Server do
   defp clear_data_from_pid(pid, state) do
     expectations = Map.delete(state.expectations, pid)
     stubs = Map.delete(state.stubs, pid)
+
+    # Lazy rows must go first: promote_lazy_allowance/2 relies on this ordering
+    :ets.select_delete(@lazy_allowances_table, [{{:_, pid, :_}, [], [true]}])
 
     select = [{{{pid, :_}, :_}, [], [true]}, {{{:_, :_}, pid}, [], [true]}]
 
@@ -363,6 +432,19 @@ defmodule Mimic.Server do
 
       %{state | expectations: expectations}
     end)
+  end
+
+  def handle_call({:allow_lazy, module, owner, fun}, _from, state) do
+    case :ets.lookup(@table, :mode) do
+      [{:mode, :private}] ->
+        monitor_if_not_verify_on_exit(owner, state.verify_on_exit)
+        :ets.insert(@lazy_allowances_table, {module, owner, fun})
+
+        {:reply, {:ok, module}, state}
+
+      [{:mode, :global, _global_pid}] ->
+        {:reply, {:error, :global}, state}
+    end
   end
 
   def handle_call({:verify, pid}, _from, state) do
