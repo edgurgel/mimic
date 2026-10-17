@@ -1048,7 +1048,7 @@ defmodule Mimic.Test do
       assert_receive {:result, 103}
     end
 
-    test "lazy function is called on each mock invocation" do
+    test "lazy function is not called again once it resolves the caller" do
       parent_pid = self()
       name = :"lazy_cache_#{System.unique_integer([:positive])}"
       counter = :counters.new(1, [:atomics])
@@ -1068,32 +1068,166 @@ defmodule Mimic.Test do
       end)
 
       assert_receive :done
-      assert :counters.get(counter, 1) == 2
+      assert :counters.get(counter, 1) == 1
     end
 
-    test "does not create a duplicate monitor when the same owner allows with a function more than once" do
+    test "a lazily resolved pid can allow other processes" do
       parent_pid = self()
-      coordinator_pid = Process.whereis(Mimic.Coordinator)
+      name = :"lazy_reallow_#{System.unique_integer([:positive])}"
 
-      owner_pid =
+      Calculator
+      |> stub(:add, fn _, _ -> :mocked end)
+      |> allow(self(), fn -> Process.whereis(name) end)
+
+      spawn_link(fn ->
+        Process.register(self(), name)
+        direct = Calculator.add(1, 2)
+
+        child =
+          spawn_link(fn ->
+            receive do
+              :go -> send(parent_pid, {:child, Calculator.add(1, 2)})
+            end
+          end)
+
+        allow(Calculator, self(), child)
+        send(child, :go)
+        send(parent_pid, {:direct, direct})
+      end)
+
+      assert_receive {:direct, :mocked}
+      assert_receive {:child, :mocked}
+    end
+
+    test "a lazily resolved pid already allowed by another owner keeps that owner" do
+      parent_pid = self()
+      name = :"lazy_conflict_#{System.unique_integer([:positive])}"
+
+      allowed_pid =
+        spawn_link(fn ->
+          Process.register(self(), name)
+
+          receive do
+            :call_add -> send(parent_pid, {:result, Calculator.add(1, 2)})
+          end
+        end)
+
+      other_owner =
         spawn(fn ->
-          Calculator |> stub(:add, fn _, _ -> 1 end) |> allow(self(), fn -> nil end)
-          Counter |> stub(:inc, fn x -> x end) |> allow(self(), fn -> nil end)
-          send(parent_pid, :ready)
+          Calculator
+          |> stub(:add, fn _, _ -> :other_owner end)
+          |> allow(self(), allowed_pid)
+
+          send(parent_pid, :other_owner_ready)
 
           receive do
             :done -> :ok
           end
         end)
 
+      on_exit(fn -> Process.exit(other_owner, :kill) end)
+      assert_receive :other_owner_ready
+
+      # The caller resolves through this lazy function, which also returns a
+      # pid another owner already allowed. That allowance must not be replaced.
+      caller_name = :"lazy_conflict_caller_#{System.unique_integer([:positive])}"
+
+      Calculator
+      |> stub(:add, fn _, _ -> :this_owner end)
+      |> allow(self(), fn -> [allowed_pid, Process.whereis(caller_name)] end)
+
+      spawn_link(fn ->
+        Process.register(self(), caller_name)
+        send(parent_pid, {:caller, Calculator.add(1, 2)})
+      end)
+
+      assert_receive {:caller, :this_owner}
+
+      send(allowed_pid, :call_add)
+      assert_receive {:result, :other_owner}
+    end
+
+    test "lazy allowances of a verify_on_exit owner outlive it until verification, like pid allowances" do
+      parent_pid = self()
+      name = :"lazy_verify_on_exit_#{System.unique_integer([:positive])}"
+
+      make_worker = fn tag ->
+        spawn_link(fn ->
+          receive do
+            :call_add -> send(parent_pid, {tag, Calculator.add(1, 2)})
+          end
+        end)
+      end
+
+      pid_allowed = make_worker.(:pid_allowed)
+      lazily_allowed = make_worker.(:lazily_allowed)
+      Process.register(lazily_allowed, name)
+
+      owner_pid =
+        spawn(fn ->
+          # verify_on_exit!/1 registers an on_exit callback, which needs the test process
+          Mimic.Server.verify_on_exit(self())
+
+          Calculator
+          |> stub(:add, fn _, _ -> :mocked end)
+          |> allow(self(), pid_allowed)
+          |> allow(self(), fn -> Process.whereis(name) end)
+        end)
+
+      Process.monitor(owner_pid)
+      assert_receive {:DOWN, _, _, ^owner_pid, _}
+      :timer.sleep(1)
+
+      send(pid_allowed, :call_add)
+      send(lazily_allowed, :call_add)
+      assert_receive {:pid_allowed, :mocked}
+      assert_receive {:lazily_allowed, :mocked}
+
+      Mimic.Server.exit(owner_pid)
+    end
+
+    test "lazy allowances are cleaned up together with their promoted pids when the owner dies" do
+      parent_pid = self()
+      name = :"lazy_promoted_cleanup_#{System.unique_integer([:positive])}"
+
+      allowed_pid =
+        spawn_link(fn ->
+          Process.register(self(), name)
+
+          for tag <- [:before, :after] do
+            receive do
+              {:call_add, ^tag} -> send(parent_pid, {tag, Calculator.add(1, 2)})
+            end
+          end
+        end)
+
+      owner_pid =
+        spawn(fn ->
+          Calculator
+          |> stub(:add, fn _, _ -> :mocked end)
+          |> allow(self(), fn -> Process.whereis(name) end)
+
+          send(parent_pid, :ready)
+
+          receive do
+            :die -> :ok
+          end
+        end)
+
       assert_receive :ready
+      send(allowed_pid, {:call_add, :before})
+      assert_receive {:before, :mocked}
 
-      {:monitors, monitors} = Process.info(coordinator_pid, :monitors)
-      owner_monitor_count = Enum.count(monitors, fn {:process, pid} -> pid == owner_pid end)
+      Process.monitor(owner_pid)
+      send(owner_pid, :die)
+      assert_receive {:DOWN, _, _, ^owner_pid, _}
+      :timer.sleep(1)
 
-      send(owner_pid, :done)
+      assert :ets.match_object(Mimic.LazyAllowances, {Calculator, owner_pid, :_}) == []
+      assert :ets.match_object(Mimic.Coordinator, {:_, owner_pid}) == []
 
-      assert owner_monitor_count == 1
+      send(allowed_pid, {:call_add, :after})
+      assert_receive {:after, 3}
     end
 
     test "supports lazy allowances that return a list of pids" do
@@ -1255,7 +1389,7 @@ defmodule Mimic.Test do
 
       :timer.sleep(1)
 
-      assert :ets.match_object(:lazy_allowances, {Calculator, owner_pid, :_}) == []
+      assert :ets.match_object(Mimic.LazyAllowances, {Calculator, owner_pid, :_}) == []
 
       # After owner dies, lazy allowance should be gone — calls fall through to original
       send(allowed_pid, :call_add)
@@ -1341,18 +1475,47 @@ defmodule Mimic.Test do
           end
         end)
 
-      refute :ets.match_object(:lazy_allowances, {Calculator, owner_pid, :_}) == []
+      refute :ets.match_object(Mimic.LazyAllowances, {Calculator, owner_pid, :_}) == []
 
       Process.monitor(owner_pid)
       send(owner_pid, :die)
       assert_receive {:DOWN, _, _, ^owner_pid, _}
       :timer.sleep(1)
 
-      assert :ets.match_object(:lazy_allowances, {Calculator, owner_pid, :_}) == []
+      assert :ets.match_object(Mimic.LazyAllowances, {Calculator, owner_pid, :_}) == []
 
       # After owner dies, lazy allowance should be gone — calls fall through to original
       send(allowed_pid, :call_add)
       assert_receive {:result, 4}
+    end
+
+    test "allows a process by registered name, resolved at allow time" do
+      parent_pid = self()
+      name = :"allow_by_name_#{System.unique_integer([:positive])}"
+
+      allowed_pid =
+        spawn_link(fn ->
+          receive do
+            :call_add -> send(parent_pid, {:result, Calculator.add(1, 2)})
+          end
+        end)
+
+      Process.register(allowed_pid, name)
+
+      Calculator
+      |> stub(:add, fn _, _ -> :mocked end)
+      |> allow(self(), name)
+
+      send(allowed_pid, :call_add)
+      assert_receive {:result, :mocked}
+    end
+
+    test "raises if a registered name does not resolve to a pid" do
+      name = :"unregistered_#{System.unique_integer([:positive])}"
+
+      assert_raise ArgumentError, ~r/cannot allow :unregistered_\d+ to use Calculator/, fn ->
+        allow(Calculator, self(), name)
+      end
     end
 
     test "raises if you try to allow with function while in global mode" do

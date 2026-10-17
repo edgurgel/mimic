@@ -153,8 +153,9 @@ end
 
 When the process you want to allow doesn't exist yet at the time you set up
 expectations, pass a zero-arity function instead of a pid. The function is
-called on each mock invocation to determine whether the caller is allowed,
-so it handles dynamic process pools where pids change over time.
+called on mock invocations from processes that are not otherwise allowed, so it
+handles dynamic process pools where pids change over time. Every pid it returns
+becomes a regular allowance until the owner exits.
 
 ```elixir
 test "allows a process that starts later" do
@@ -172,7 +173,11 @@ end
 - Returns `nil` → falls through to the original implementation (no error)
 - Returns a single pid → that pid is allowed
 - Returns a list of pids → all are allowed
-- The function is called on each mock invocation to determine whether the caller is allowed
+- Once a pid is returned it stays allowed; the function is not called again for it
+- A pid already allowed by (or owning) another owner keeps that owner
+
+`allow/3` also accepts a registered name, resolved immediately with
+`GenServer.whereis/1`; it raises if the name is not registered yet.
 
 ### **IMPORTANT**: Task Automatic Allowance
 

@@ -22,8 +22,9 @@ defmodule Mimic.Coordinator do
   # Shared table holding owner allowances and the private/global mode flag.
   @table Mimic.Coordinator
 
-  # Holds lazy allowances directly as {module, owner_pid, fun} rows, keyed by module.
-  @lazy_allowances_table :lazy_allowances
+  # Lazy allowances as {module, owner_pid, fun} rows, keyed by module. Written by
+  # the owner's Mimic.Server shard, read by callers on dispatch.
+  @lazy_allowances_table Mimic.LazyAllowances
 
   @spec ensure_copied(module) :: :ok | {:error, {:module_not_copied, module}}
   def ensure_copied(module) do
@@ -42,11 +43,6 @@ defmodule Mimic.Coordinator do
   @spec allow(module, pid, pid) :: {:ok, module} | {:error, :global}
   def allow(module, owner_pid, allowed_pid) do
     GenServer.call(__MODULE__, {:allow, module, owner_pid, allowed_pid}, @long_timeout)
-  end
-
-  @spec allow_lazy(module, pid, (-> pid | [pid] | nil)) :: {:ok, module} | {:error, :global}
-  def allow_lazy(module, owner_pid, fun) when is_function(fun, 0) do
-    GenServer.call(__MODULE__, {:allow_lazy, module, owner_pid, fun}, @long_timeout)
   end
 
   @spec release_global_owner(pid) :: :ok
@@ -102,7 +98,7 @@ defmodule Mimic.Coordinator do
 
   def init([]) do
     :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
-    :ets.new(@lazy_allowances_table, [:named_table, :protected, :bag, read_concurrency: true])
+    :ets.new(@lazy_allowances_table, [:named_table, :public, :bag, read_concurrency: true])
 
     :ets.insert(@table, {:mode, :private})
     {:ok, %State{}}
@@ -130,20 +126,6 @@ defmodule Mimic.Coordinator do
       [{:mode, :private}] ->
         actual_owner = resolve_actual_owner(owner_pid, module)
         :ets.insert(@table, {{allowed_pid, module}, actual_owner})
-
-        {:reply, {:ok, module}, state}
-
-      [{:mode, :global, _global_pid}] ->
-        {:reply, {:error, :global}, state}
-    end
-  end
-
-  def handle_call({:allow_lazy, module, owner_pid, fun}, _from, state) do
-    case :ets.lookup(@table, :mode) do
-      [{:mode, :private}] ->
-        actual_owner = resolve_actual_owner(owner_pid, module)
-        monitor_lazy_owner(actual_owner)
-        :ets.insert(@lazy_allowances_table, {module, actual_owner, fun})
 
         {:reply, {:ok, module}, state}
 
@@ -240,9 +222,8 @@ defmodule Mimic.Coordinator do
     {:noreply, %{state | reset_tasks: reset_tasks}}
   end
 
-  # DOWN from a completed reset task or an owner pid monitored via allow_lazy/3
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    remove_lazy_allowances(pid)
+  # DOWN from a completed reset task
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
     {:noreply, state}
   end
 
@@ -296,14 +277,5 @@ defmodule Mimic.Coordinator do
       [{{^owner_pid, ^module}, actual_owner_pid}] -> actual_owner_pid
       [] -> owner_pid
     end
-  end
-
-  defp monitor_lazy_owner(owner_pid) do
-    {:monitors, monitors} = Process.info(self(), :monitors)
-    if {:process, owner_pid} not in monitors, do: Process.monitor(owner_pid)
-  end
-
-  defp remove_lazy_allowances(pid) do
-    :ets.select_delete(@lazy_allowances_table, [{{:_, pid, :_}, [], [true]}])
   end
 end

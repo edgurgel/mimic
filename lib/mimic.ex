@@ -312,14 +312,16 @@ defmodule Mimic do
 
     * `module` - the copied module.
     * `owner_pid` - the process ID of the process which created the stub.
-    * `allowed_pid_or_fun` - the process ID of the process which should also be
-      allowed to use this stub, or a zero-arity function to resolve allowed pids
+    * `allowed_via` - the process which should also be allowed to use this stub.
+      It can be a pid, a registered name (anything `GenServer.whereis/1` accepts,
+      resolved immediately), or a zero-arity function to resolve allowed pids
       lazily at time of invocation. If a function is provided, it must return a
       pid, `nil`, or a list of those.
 
   ## Raises:
 
     * If Mimic is running in global mode.
+    * If a registered name does not resolve to a local pid.
 
   Allows other processes to share expectations and stubs defined by another
   process.
@@ -344,8 +346,10 @@ defmodule Mimic do
   ## Lazy (deferred) allowances
 
   If the process you want to allow doesn't exist yet at the time you set up
-  expectations, you can pass a function instead of a pid. The function will be
-  called on each mock invocation to determine whether the caller is allowed.
+  expectations, you can pass a function instead of a pid. Until it returns the
+  caller, the function is called on mock invocations from processes that are not
+  otherwise allowed. Every pid it returns then becomes a regular allowance, kept
+  until the owner is cleaned up, so the function is not called again for it.
 
   ```elixir
   test "allows a process that starts later" do
@@ -358,13 +362,13 @@ defmodule Mimic do
   end
   ```
   """
-  @spec allow(module(), pid(), pid() | (-> pid() | [pid() | nil] | nil)) ::
+  @spec allow(module(), pid(), pid() | GenServer.name() | (-> pid() | [pid() | nil] | nil)) ::
           module() | {:error, atom()}
-  def allow(module, owner_pid, allowed_pid_or_fun)
+  def allow(module, owner_pid, allowed_via)
 
   def allow(module, owner_pid, fun) when is_function(fun, 0) do
     module
-    |> Coordinator.allow_lazy(owner_pid, fun)
+    |> Server.allow_lazy(owner_pid, fun)
     |> validate_server_response(:allow)
   end
 
@@ -372,6 +376,18 @@ defmodule Mimic do
     module
     |> Coordinator.allow(owner_pid, allowed_pid)
     |> validate_server_response(:allow)
+  end
+
+  def allow(module, owner_pid, name) do
+    case GenServer.whereis(name) do
+      pid when is_pid(pid) ->
+        allow(module, owner_pid, pid)
+
+      _ ->
+        raise ArgumentError,
+              "cannot allow #{inspect(name)} to use #{inspect(module)} because it does not " <>
+                "resolve to a local pid. Use a function to allow a process that starts later."
+    end
   end
 
   @doc """
