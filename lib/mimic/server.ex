@@ -161,6 +161,13 @@ defmodule Mimic.Server do
   defp promote_lazy_allowance(pid, lazy_allowance = {module, owner_pid, _fun}) do
     allowance = {{pid, module}, owner_pid}
 
+    # insert_new/2 never overwrites, so a pid that is already allowed keeps its owner.
+    #
+    # Race: the owner can be cleaned up (clear_data_from_pid/2 or soft_reset) between
+    # our read of lazy_allowance and this insert, e.g. while the lazy function runs.
+    # Cleanup deletes lazy rows before regular rows, so if lazy_allowance is gone
+    # now, our row may have been inserted after cleanup and would be orphaned:
+    # undo it. delete_object/2 only removes our exact row, never another owner's.
     if :ets.insert_new(@table, allowance) and
          lazy_allowance not in :ets.lookup(@lazy_allowances_table, module) do
       :ets.delete_object(@table, allowance)
