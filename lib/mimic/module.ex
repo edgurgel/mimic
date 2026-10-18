@@ -35,9 +35,22 @@ defmodule Mimic.Module do
       end
 
     rename_module(module, backup_module)
-    Code.compiler_options(ignore_module_conflict: true)
-    create_mock(module, Map.new(opts))
-    Code.compiler_options(ignore_module_conflict: false)
+
+    # This compiler option is VM-global. Cooperating code generators (including
+    # DoubleDown) use this same node-local lock for the entire option lifetime.
+    :global.trans(
+      {{:elixir_compiler_option, :ignore_module_conflict}, self()},
+      fn ->
+        previous = Code.compiler_options(ignore_module_conflict: true)
+
+        try do
+          create_mock(module, Map.new(opts))
+        after
+          Code.compiler_options(ignore_module_conflict: previous[:ignore_module_conflict])
+        end
+      end,
+      [node()]
+    )
 
     result
   end
