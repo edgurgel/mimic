@@ -53,6 +53,19 @@ defmodule Mimic.Test do
       assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.add(3, 7) end
     end
 
+    test "stubs macros" do
+      stub(Calculator)
+
+      assert_raise Mimic.UnexpectedCallError, fn ->
+        Code.eval_quoted(
+          quote do
+            require Calculator
+            Calculator.add_macro(1, 2)
+          end
+        )
+      end
+    end
+
     test "stubbing when mock is not defined" do
       assert_raise ArgumentError, fn -> stub(Date) end
     end

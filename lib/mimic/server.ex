@@ -292,6 +292,14 @@ defmodule Mimic.Server do
     %{state | expectations: expectations, stubs: stubs, call_history: call_history}
   end
 
+  # The functions of a copied module. The copy is an Elixir module, so they come from its
+  # precomputed __info__/1 lists: module_info(:exports) walks the VM's whole export table,
+  # which takes milliseconds once an application has loaded thousands of modules.
+  defp copied_functions(module) do
+    macros = for {name, arity} <- module.__info__(:macros), do: {:"MACRO-#{name}", arity + 1}
+    module.__info__(:functions) ++ macros
+  end
+
   defp find_stub(stubs, module, fn_name, arity, caller) do
     case get_in(stubs, [caller, {module, fn_name, arity}]) do
       func when is_function(func) or func == @unexpected_call -> {:ok, func}
@@ -371,11 +379,9 @@ defmodule Mimic.Server do
 
   def handle_call({:stub, module, owner}, _from, state) do
     register_owner(owner, module, state, fn ->
-      internal_functions = [__info__: 1, module_info: 0, module_info: 1]
-
       stubs =
-        module.module_info(:exports)
-        |> Enum.filter(&(&1 not in internal_functions))
+        module
+        |> copied_functions()
         |> Enum.reduce(state.stubs, fn {fn_name, arity}, stubs ->
           put_in(stubs, [Access.key(owner, %{}), {module, fn_name, arity}], @unexpected_call)
         end)
@@ -386,25 +392,11 @@ defmodule Mimic.Server do
 
   def handle_call({:stub_with, mocked_module, mocking_module, owner}, _from, state) do
     register_owner(owner, mocked_module, state, fn ->
-      original_module = Mimic.Module.original(mocked_module)
-
-      internal_functions = [__info__: 1, module_info: 0, module_info: 1]
-
-      mocked_public_functions =
-        original_module.module_info(:exports)
-        |> Enum.filter(&(&1 not in internal_functions))
-        |> MapSet.new()
-
-      mocking_public_functions =
-        mocking_module.module_info(:exports)
-        |> Enum.filter(&(&1 not in internal_functions))
-        |> MapSet.new()
-
-      will_be_mocked_functions =
-        MapSet.intersection(mocking_public_functions, mocked_public_functions)
-
-      will_be_stubbed_functions =
-        MapSet.difference(mocked_public_functions, mocking_public_functions)
+      {will_be_mocked_functions, will_be_stubbed_functions} =
+        (copied_functions(mocked_module) -- [__mimic_info__: 0])
+        |> Enum.split_with(fn {fn_name, arity} ->
+          function_exported?(mocking_module, fn_name, arity)
+        end)
 
       stubs =
         will_be_mocked_functions
