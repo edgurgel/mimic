@@ -30,6 +30,11 @@ defmodule Mimic.Server do
   # up by the owner's shard, alongside the owner's other allowances.
   @lazy_allowances_table Mimic.LazyAllowances
 
+  # Stub value for functions stubbed by stub/1, and by stub_with/2 when the mocking
+  # module does not define them. The caller raises on it; building a raising function
+  # of the right arity instead would mean evaluating code on every stub/1 call.
+  @unexpected_call :__mimic_unexpected_call__
+
   defp shard(pid), do: {:via, PartitionSupervisor, {Mimic.Server.Partitions, pid}}
 
   @spec verify(pid) :: [{{module, atom, non_neg_integer}, non_neg_integer, non_neg_integer}]
@@ -186,6 +191,10 @@ defmodule Mimic.Server do
            {:apply, owner_pid, module, fn_name, arity, args},
            :infinity
          ) do
+      {:ok, @unexpected_call} ->
+        mfa = Exception.format_mfa(module, fn_name, args)
+        raise Mimic.UnexpectedCallError, "Stub! Unexpected call to #{mfa} from #{inspect(self())}"
+
       {:ok, func} ->
         Kernel.apply(func, args)
 
@@ -285,7 +294,7 @@ defmodule Mimic.Server do
 
   defp find_stub(stubs, module, fn_name, arity, caller) do
     case get_in(stubs, [caller, {module, fn_name, arity}]) do
-      func when is_function(func) -> {:ok, func}
+      func when is_function(func) or func == @unexpected_call -> {:ok, func}
       nil -> :unexpected
     end
   end
@@ -368,8 +377,7 @@ defmodule Mimic.Server do
         module.module_info(:exports)
         |> Enum.filter(&(&1 not in internal_functions))
         |> Enum.reduce(state.stubs, fn {fn_name, arity}, stubs ->
-          func = stub_function(module, fn_name, arity)
-          put_in(stubs, [Access.key(owner, %{}), {module, fn_name, arity}], func)
+          put_in(stubs, [Access.key(owner, %{}), {module, fn_name, arity}], @unexpected_call)
         end)
 
       %{state | stubs: stubs}
@@ -401,7 +409,7 @@ defmodule Mimic.Server do
       stubs =
         will_be_mocked_functions
         |> Enum.reduce(state.stubs, fn {fn_name, arity}, stubs ->
-          func = anonymize_module_function(mocking_module, fn_name, arity)
+          func = Function.capture(mocking_module, fn_name, arity)
           func = maybe_typecheck_func(mocked_module, fn_name, func)
           put_in(stubs, [Access.key(owner, %{}), {mocked_module, fn_name, arity}], func)
         end)
@@ -409,8 +417,11 @@ defmodule Mimic.Server do
       stubs =
         will_be_stubbed_functions
         |> Enum.reduce(stubs, fn {fn_name, arity}, stubs ->
-          func = stub_function(mocked_module, fn_name, arity)
-          put_in(stubs, [Access.key(owner, %{}), {mocked_module, fn_name, arity}], func)
+          put_in(
+            stubs,
+            [Access.key(owner, %{}), {mocked_module, fn_name, arity}],
+            @unexpected_call
+          )
         end)
 
       %{state | stubs: stubs}
@@ -534,42 +545,5 @@ defmodule Mimic.Server do
     unless MapSet.member?(verify_on_exit, pid) do
       Process.monitor(pid)
     end
-  end
-
-  defp stub_function(module, fn_name, arity) do
-    args =
-      0..arity
-      |> Enum.to_list()
-      |> tl
-      |> Enum.map(fn i -> Macro.var(String.to_atom("arg_#{i}"), nil) end)
-
-    clause =
-      quote do
-        unquote_splicing(args) ->
-          mfa = Exception.format_mfa(unquote(module), unquote(fn_name), unquote(args))
-
-          raise Mimic.UnexpectedCallError,
-                "Stub! Unexpected call to #{mfa} from #{inspect(self())}"
-      end
-
-    {fun, _} = Code.eval_quoted({:fn, [], clause})
-    fun
-  end
-
-  defp anonymize_module_function(module, fn_name, arity) do
-    args =
-      0..arity
-      |> Enum.to_list()
-      |> tl
-      |> Enum.map(fn i -> Macro.var(String.to_atom("arg_#{i}"), nil) end)
-
-    clause =
-      quote do
-        unquote_splicing(args) ->
-          apply(unquote(module), unquote(fn_name), [unquote_splicing(args)])
-      end
-
-    {fun, _} = Code.eval_quoted({:fn, [], clause})
-    fun
   end
 end

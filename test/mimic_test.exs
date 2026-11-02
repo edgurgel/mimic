@@ -46,6 +46,13 @@ defmodule Mimic.Test do
       assert_receive :ok
     end
 
+    test "the error names the call and the calling process" do
+      stub(Calculator)
+
+      message = "Stub! Unexpected call to Calculator.add(3, 7) from #{inspect(self())}"
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.add(3, 7) end
+    end
+
     test "stubbing when mock is not defined" do
       assert_raise ArgumentError, fn -> stub(Date) end
     end
@@ -104,7 +111,8 @@ defmodule Mimic.Test do
     test "stubs all functions which are not in mocking module" do
       stub_with(Calculator, InverseCalculator)
 
-      assert_raise Mimic.UnexpectedCallError, fn -> Calculator.mult(4, 9) end
+      message = "Stub! Unexpected call to Calculator.mult(4, 9) from #{inspect(self())}"
+      assert_raise Mimic.UnexpectedCallError, message, fn -> Calculator.mult(4, 9) end
     end
 
     test "undefined mocking module" do
