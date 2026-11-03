@@ -1,3 +1,14 @@
+# 2.5.0 (2026-11-03)
+
+* feat: `allow/3` accepts a zero-arity function to allow processes lazily, at the
+  time a mock is invoked, so processes that don't exist yet when expectations are
+  set up can be allowed. It also accepts a registered name (anything
+  `GenServer.whereis/1` accepts), resolved immediately, and raises if the name
+  does not resolve to a local pid. By @bencoppock in #124
+* perf: make `stub/1` and `stub_with/2` cheap in large apps. They no longer
+  evaluate code for every function of the module or scan the VM's export table.
+  By @MrYawe in #131
+
 # 2.4.2 (2026-09-18)
 
 * fix: release global mode when the test that set it finishes. It was handed back
