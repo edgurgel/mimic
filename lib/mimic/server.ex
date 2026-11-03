@@ -13,7 +13,8 @@ defmodule Mimic.Server do
     defstruct verify_on_exit: MapSet.new(),
               stubs: %{},
               expectations: %{},
-              call_history: %{}
+              call_history: %{},
+              assertion_failures: %{}
   end
 
   defmodule Expectation do
@@ -37,7 +38,8 @@ defmodule Mimic.Server do
 
   defp shard(pid), do: {:via, PartitionSupervisor, {Mimic.Server.Partitions, pid}}
 
-  @spec verify(pid) :: [{{module, atom, non_neg_integer}, non_neg_integer, non_neg_integer}]
+  @spec verify(pid) ::
+          {[{{module, atom, non_neg_integer}, non_neg_integer, non_neg_integer}], list()}
   def verify(pid) do
     GenServer.call(shard(pid), {:verify, pid}, @long_timeout)
   end
@@ -196,7 +198,20 @@ defmodule Mimic.Server do
         raise Mimic.UnexpectedCallError, "Stub! Unexpected call to #{mfa} from #{inspect(self())}"
 
       {:ok, func} ->
-        Kernel.apply(func, args)
+        try do
+          Kernel.apply(func, args)
+        rescue
+          error in ExUnit.AssertionError ->
+            if self() != owner_pid do
+              GenServer.call(
+                shard(owner_pid),
+                {:assertion_failure, owner_pid, error, __STACKTRACE__},
+                @long_timeout
+              )
+            end
+
+            reraise error, __STACKTRACE__
+        end
 
       :original ->
         apply_original(module, fn_name, args)
@@ -279,6 +294,7 @@ defmodule Mimic.Server do
   defp clear_data_from_pid(pid, state) do
     expectations = Map.delete(state.expectations, pid)
     stubs = Map.delete(state.stubs, pid)
+    assertion_failures = Map.delete(state.assertion_failures, pid)
 
     # Lazy rows must go first: promote_lazy_allowance/2 relies on this ordering
     :ets.select_delete(@lazy_allowances_table, [{{:_, pid, :_}, [], [true]}])
@@ -289,7 +305,13 @@ defmodule Mimic.Server do
 
     call_history = Map.delete(state.call_history, pid)
 
-    %{state | expectations: expectations, stubs: stubs, call_history: call_history}
+    %{
+      state
+      | expectations: expectations,
+        stubs: stubs,
+        call_history: call_history,
+        assertion_failures: assertion_failures
+    }
   end
 
   # The functions of a copied module. The copy is an Elixir module, so they come from its
@@ -461,7 +483,18 @@ defmodule Mimic.Server do
         {{module, fn_name, arity}, expectation.num_calls, expectation.num_applied_calls}
       end
 
-    {:reply, pending, state}
+    assertion_failures = state.assertion_failures[pid] || []
+
+    {:reply, {pending, assertion_failures}, state}
+  end
+
+  def handle_call({:assertion_failure, owner_pid, error, stacktrace}, _from, state) do
+    assertion_failures =
+      Map.update(state.assertion_failures, owner_pid, [{error, stacktrace}], fn failures ->
+        failures ++ [{error, stacktrace}]
+      end)
+
+    {:reply, :ok, %{state | assertion_failures: assertion_failures}}
   end
 
   def handle_call({:verify_on_exit, pid}, _from, state) do
@@ -469,7 +502,7 @@ defmodule Mimic.Server do
   end
 
   def handle_call(:soft_reset, _from, state) do
-    {:reply, :ok, %{state | expectations: %{}, stubs: %{}}}
+    {:reply, :ok, %{state | expectations: %{}, stubs: %{}, assertion_failures: %{}}}
   end
 
   def handle_call({:get_calls, {module, fn_name, arity}, owner_pid}, _from, state) do

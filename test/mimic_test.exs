@@ -1919,7 +1919,7 @@ defmodule Mimic.Test do
                ExUnit.OnExitHandler.run(test_pid, 1_000)
 
       # The callback cleaned up the pending expectation even though verification raised.
-      assert Mimic.Server.verify(test_pid) == []
+      assert Mimic.Server.verify(test_pid) == {[], []}
     end
   end
 

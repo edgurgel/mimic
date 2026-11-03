@@ -39,7 +39,7 @@ defmodule Mimic.GlobalModeOnExitTest do
         assert Mimic.Coordinator.get_mode() == :private,
                "set_mimic_global/1's callback did not run"
 
-        assert Mimic.Server.verify(test_pid) == []
+        assert Mimic.Server.verify(test_pid) == {[], []}
 
         assert :ets.lookup(Mimic.Coordinator, {test_pid, Calculator}) == [],
                "verify_on_exit!/1's callback did not run: Server.exit/1 never cleared the owner"
